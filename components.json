@@ -5,15 +5,15 @@
   "rsc": false,
   "tailwind": {
     "config": "",
-    "css": "src/renderer/src/assets/main.css",
+    "css": "apps/desktop/src/renderer/src/assets/main.css",
     "baseColor": "neutral",
     "cssVariables": true
   },
   "aliases": {
-    "components": "@/components",
-    "ui": "@/components/ui",
-    "lib": "@/lib",
-    "utils": "@/lib/utils",
+    "components": "packages/ui/src/components",
+    "ui": "packages/ui/src/components",
+    "lib": "packages/ui/src/lib",
+    "utils": "packages/ui/src/lib/utils",
     "hooks": "@/hooks"
   },
   "iconLibrary": "lucide"

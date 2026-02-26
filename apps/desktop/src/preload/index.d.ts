@@ -1,0 +1,83 @@
+import { ElectronAPI } from '@electron-toolkit/preload'
+import {
+  type ShortcutActionId,
+  type ShortcutBindings,
+  type ShortcutUpdateResult
+} from '@onpoint/shared/shortcuts'
+import type {
+  ArchiveNoteResult,
+  CreateFolderResult,
+  CreateNoteInput,
+  DeleteNoteResult,
+  MoveNoteResult,
+  NoteDocument,
+  NotesConfig,
+  NoteSummary,
+  RenameFolderResult,
+  RenameNoteResult,
+  SaveNoteResult
+} from '@onpoint/shared/notes'
+
+type WindowControlsAPI = {
+  platform: NodeJS.Platform
+  minimize: () => Promise<void>
+  toggleMaximize: () => Promise<boolean>
+  close: () => Promise<void>
+  isMaximized: () => Promise<boolean>
+  zoomIn: () => Promise<void>
+  zoomOut: () => Promise<void>
+  resetZoom: () => Promise<void>
+  getZoomFactor: () => Promise<number>
+  onMaximizeChanged: (callback: (isMaximized: boolean) => void) => () => void
+  onZoomFactorChanged: (callback: (zoomFactor: number) => void) => () => void
+  detachTab: (relativePath: string) => Promise<boolean>
+  getDetachInit: () => Promise<{ relativePath: string } | null>
+  newWindow: () => Promise<void>
+  getWindowId: () => Promise<string | null>
+}
+
+type ShortcutsAPI = {
+  list: () => Promise<ShortcutBindings>
+  update: (actionId: ShortcutActionId, accelerator: string) => Promise<ShortcutUpdateResult>
+  reset: (actionId: ShortcutActionId) => Promise<void>
+  resetAll: () => Promise<void>
+  onGlobalAction: (callback: (actionId: ShortcutActionId) => void) => () => void
+  onBindingsChanged: (callback: (bindings: ShortcutBindings) => void) => () => void
+}
+
+type GhostModeConfig = {
+  opacity: number
+}
+
+type GhostModeAPI = {
+  getState: () => Promise<boolean>
+  getConfig: () => Promise<GhostModeConfig>
+  setOpacity: (value: number) => Promise<GhostModeConfig>
+  onStateChanged: (callback: (isActive: boolean) => void) => () => void
+}
+
+type NotesAPI = {
+  getConfig: () => Promise<NotesConfig>
+  pickVault: () => Promise<string | null>
+  setVault: (vaultPath: string) => Promise<NotesConfig>
+  listNotes: () => Promise<NoteSummary[]>
+  openNote: (relativePath: string) => Promise<NoteDocument>
+  createNote: (input?: CreateNoteInput, parentRelativePath?: string) => Promise<NoteDocument>
+  saveNote: (relativePath: string, content: string) => Promise<SaveNoteResult>
+  renameNote: (relativePath: string, requestedTitle: string) => Promise<RenameNoteResult>
+  deleteNote: (relativePath: string) => Promise<DeleteNoteResult>
+  archiveNote: (relativePath: string) => Promise<ArchiveNoteResult>
+  moveNote: (fromPath: string, toPath: string) => Promise<MoveNoteResult>
+  createFolder: (relativePath: string) => Promise<CreateFolderResult>
+  renameFolder: (fromPath: string, toPath: string) => Promise<RenameFolderResult>
+}
+
+declare global {
+  interface Window {
+    electron: ElectronAPI
+    windowControls: WindowControlsAPI
+    shortcuts: ShortcutsAPI
+    notes: NotesAPI
+    ghostMode: GhostModeAPI
+  }
+}
