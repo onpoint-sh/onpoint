@@ -46,6 +46,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
       : {}
 
   const mainWindow = new BrowserWindow({
+    title: ' ',
     width: restoredState?.width ?? 900,
     height: restoredState?.height ?? 670,
     ...positionOpts,
@@ -54,9 +55,9 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     frame: isMac,
     ...(isMac
       ? {
-          titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 14, y: 12 }
-        }
+        titleBarStyle: 'hiddenInset' as const,
+        trafficLightPosition: { x: 14, y: 12 }
+      }
       : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -70,9 +71,6 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
       mainWindow.maximize()
     }
     mainWindow.show()
-    if (is.dev) {
-      mainWindow.webContents.openDevTools()
-    }
   })
 
   mainWindow.on('maximize', () => {

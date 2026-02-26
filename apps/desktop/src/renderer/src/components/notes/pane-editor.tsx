@@ -310,16 +310,26 @@ function PaneEditor({
   // Handle focus requests
   useEffect(() => {
     if (!editor || !relativePath || !focusRequestId) return
+    if (!isUntitledPath(relativePath) && isLoading) return
+
+    const handleFocused = (): void => {
+      onFocusConsumed?.()
+    }
+
+    editor.on('focus', handleFocused)
 
     const frame = window.requestAnimationFrame(() => {
       editor.commands.focus('start')
-      onFocusConsumed?.()
+      if (editor.isFocused) {
+        onFocusConsumed?.()
+      }
     })
 
     return () => {
       window.cancelAnimationFrame(frame)
+      editor.off('focus', handleFocused)
     }
-  }, [relativePath, editor, focusRequestId, onFocusConsumed])
+  }, [relativePath, editor, focusRequestId, isLoading, onFocusConsumed])
 
   if (!relativePath) {
     return (

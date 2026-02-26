@@ -42,6 +42,7 @@ export type PanesStoreState = {
   panes: Record<string, Pane>
   focusedPaneId: string | null
   dirtyTabs: Record<string, boolean>
+  focusRequestsByPane: Record<string, number>
 
   // Pane operations
   createPane: (relativePath: string) => string
@@ -73,6 +74,8 @@ export type PanesStoreState = {
   // Dirty tracking (non-persisted)
   markTabDirty: (tabId: string) => void
   markTabClean: (tabId: string) => void
+  requestEditorFocus: (paneId?: string) => void
+  consumeEditorFocusRequest: (paneId: string, requestId: number) => void
 
   // Tab close guard (non-persisted)
   pendingCloseTab: { paneId: string; tabId: string } | null
@@ -97,6 +100,14 @@ function createPaneId(): string {
 
 function createTabId(): string {
   return `tab-${crypto.randomUUID()}`
+}
+
+let focusRequestSequence = 1
+
+function createFocusRequestId(): number {
+  const id = focusRequestSequence
+  focusRequestSequence += 1
+  return id
 }
 
 function pickNextActiveTab(tabs: PaneTab[], closedIndex: number): string | null {
@@ -143,6 +154,7 @@ export const usePanesStore = create<PanesStoreState>()(
       panes: {},
       focusedPaneId: null,
       dirtyTabs: {},
+      focusRequestsByPane: {},
       pendingCloseTab: null,
       windowCloseRequested: false,
 
@@ -165,7 +177,11 @@ export const usePanesStore = create<PanesStoreState>()(
         set({
           layout: newLayout,
           panes: { ...state.panes, [paneId]: pane },
-          focusedPaneId: paneId
+          focusedPaneId: paneId,
+          focusRequestsByPane: {
+            ...state.focusRequestsByPane,
+            [paneId]: createFocusRequestId()
+          }
         })
 
         return paneId
@@ -298,6 +314,8 @@ export const usePanesStore = create<PanesStoreState>()(
         const newLayout = removePaneFromLayout(state.layout, paneId)
         const newPanes = { ...state.panes }
         delete newPanes[paneId]
+        const nextFocusRequests = { ...state.focusRequestsByPane }
+        delete nextFocusRequests[paneId]
 
         let newFocusedPaneId = state.focusedPaneId
         if (newFocusedPaneId === paneId) {
@@ -308,7 +326,8 @@ export const usePanesStore = create<PanesStoreState>()(
         set({
           layout: newLayout,
           panes: newPanes,
-          focusedPaneId: newFocusedPaneId
+          focusedPaneId: newFocusedPaneId,
+          focusRequestsByPane: nextFocusRequests
         })
       },
 
@@ -359,7 +378,11 @@ export const usePanesStore = create<PanesStoreState>()(
               activeTabId: tabId
             }
           },
-          focusedPaneId: targetPaneId
+          focusedPaneId: targetPaneId,
+          focusRequestsByPane: {
+            ...state.focusRequestsByPane,
+            [targetPaneId]: createFocusRequestId()
+          }
         })
 
         return targetPaneId
@@ -379,8 +402,31 @@ export const usePanesStore = create<PanesStoreState>()(
       markTabClean: (tabId: string) => {
         const state = get()
         if (!state.dirtyTabs[tabId]) return
-        const { [tabId]: _, ...rest } = state.dirtyTabs
-        set({ dirtyTabs: rest })
+        const nextDirtyTabs = { ...state.dirtyTabs }
+        delete nextDirtyTabs[tabId]
+        set({ dirtyTabs: nextDirtyTabs })
+      },
+
+      requestEditorFocus: (paneId?: string) => {
+        const state = get()
+        const targetPaneId = paneId ?? state.focusedPaneId
+        if (!targetPaneId || !state.panes[targetPaneId]) return
+
+        set({
+          focusRequestsByPane: {
+            ...state.focusRequestsByPane,
+            [targetPaneId]: createFocusRequestId()
+          }
+        })
+      },
+
+      consumeEditorFocusRequest: (paneId: string, requestId: number) => {
+        if (!requestId) return
+        const state = get()
+        if (state.focusRequestsByPane[paneId] !== requestId) return
+        const nextFocusRequests = { ...state.focusRequestsByPane }
+        delete nextFocusRequests[paneId]
+        set({ focusRequestsByPane: nextFocusRequests })
       },
 
       setPendingCloseTab: (value) => {
@@ -410,8 +456,9 @@ export const usePanesStore = create<PanesStoreState>()(
 
         // Clean up dirty tracking
         if (state.dirtyTabs[tabId]) {
-          const { [tabId]: _, ...rest } = state.dirtyTabs
-          set({ dirtyTabs: rest })
+          const nextDirtyTabs = { ...state.dirtyTabs }
+          delete nextDirtyTabs[tabId]
+          set({ dirtyTabs: nextDirtyTabs })
         }
 
         const closingTab = pane.tabs[index]
@@ -581,8 +628,14 @@ export const usePanesStore = create<PanesStoreState>()(
           // Source pane becomes empty, close it
           delete newPanes[fromPaneId]
           const newLayout = removePaneFromLayout(state.layout, fromPaneId)
-          let newFocusedPaneId = toPaneId
-          set({ layout: newLayout, panes: newPanes, focusedPaneId: newFocusedPaneId })
+          const nextFocusRequests = { ...state.focusRequestsByPane }
+          delete nextFocusRequests[fromPaneId]
+          set({
+            layout: newLayout,
+            panes: newPanes,
+            focusedPaneId: toPaneId,
+            focusRequestsByPane: nextFocusRequests
+          })
         } else {
           const fromActiveTabId =
             fromPane.activeTabId === tabId
@@ -741,10 +794,18 @@ export const usePanesStore = create<PanesStoreState>()(
           newFocusedPaneId = remainingIds[0] ?? null
         }
 
+        const nextFocusRequests: Record<string, number> = {}
+        for (const [paneId, requestId] of Object.entries(state.focusRequestsByPane)) {
+          if (newPanes[paneId]) {
+            nextFocusRequests[paneId] = requestId
+          }
+        }
+
         set({
           layout: newLayout,
           panes: newPanes,
-          focusedPaneId: newFocusedPaneId
+          focusedPaneId: newFocusedPaneId,
+          focusRequestsByPane: nextFocusRequests
         })
       },
 

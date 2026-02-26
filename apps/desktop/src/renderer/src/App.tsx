@@ -44,7 +44,11 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'create_note') {
-        void createNote('Inbox')
+        void (async () => {
+          const createdPath = await createNote('Inbox')
+          if (!createdPath) return
+          usePanesStore.getState().requestEditorFocus()
+        })()
         return
       }
 

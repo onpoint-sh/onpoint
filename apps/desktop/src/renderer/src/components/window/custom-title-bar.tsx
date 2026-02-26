@@ -66,9 +66,7 @@ function CustomTitleBar({
           </button>
         ) : null}
       </div>
-      <div className="pointer-events-none flex-1 overflow-hidden px-[0.125rem] text-center text-xs font-medium text-ellipsis whitespace-nowrap text-muted-foreground">
-        Onpoint
-      </div>
+      <div className="pointer-events-none flex-1" />
       <div className="flex min-w-24 items-center justify-end gap-1">
         <GhostModeIndicator isActive={isGhostMode} />
         <WindowControls align="right" />
