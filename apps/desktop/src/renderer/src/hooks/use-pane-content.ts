@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isUntitledPath } from '@onpoint/shared/notes'
 import { useNotesStore } from '@/stores/notes-store'
+import {
+  getUntitledContent,
+  setUntitledContent
+} from '@/lib/untitled-content-store'
 
 const AUTOSAVE_DELAY_MS = 700
 
@@ -8,14 +13,17 @@ export type PaneContentState = {
   setContent: (content: string) => void
   isLoading: boolean
   isSaving: boolean
+  isDirty: boolean
   saveError: string | null
   flushSave: () => Promise<void>
+  getContent: () => string
 }
 
 export function usePaneContent(relativePath: string | null): PaneContentState {
   const [content, setContentState] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const contentRef = useRef('')
@@ -42,6 +50,9 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
     const path = relativePathRef.current
     if (!path || !dirtyRef.current || savingRef.current) return
 
+    // Untitled tabs don't autosave — they require an explicit Save As
+    if (isUntitledPath(path)) return
+
     savingRef.current = true
     setIsSaving(true)
     setSaveError(null)
@@ -50,6 +61,7 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
       await window.notes.saveNote(path, contentRef.current)
       dirtyRef.current = false
       setIsSaving(false)
+      setIsDirty(false)
       // Refresh notes list so sidebar titles update
       void useNotesStore.getState().refreshNotesList()
     } catch (error) {
@@ -66,6 +78,8 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
 
   const scheduleAutosave = useCallback(() => {
     clearAutosave()
+    // Don't schedule autosave for untitled tabs
+    if (relativePathRef.current && isUntitledPath(relativePathRef.current)) return
     autosaveTimerRef.current = window.setTimeout(() => {
       void saveNow()
     }, AUTOSAVE_DELAY_MS)
@@ -77,19 +91,26 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
       contentRef.current = newContent
       dirtyRef.current = true
       setContentState(newContent)
+      setIsDirty(true)
       setSaveError(null)
       scheduleAutosave()
     },
     [scheduleAutosave]
   )
 
+  const getContent = useCallback(() => contentRef.current, [])
+
   // Load content when relativePath changes.
   // Also flushes any dirty content for the PREVIOUS path before switching.
   useEffect(() => {
     // Flush dirty content for the old path before switching
     const oldPath = relativePathRef.current
-    if (dirtyRef.current && oldPath) {
-      void window.notes.saveNote(oldPath, contentRef.current).catch(() => {})
+    if (oldPath && dirtyRef.current) {
+      if (isUntitledPath(oldPath)) {
+        setUntitledContent(oldPath, contentRef.current)
+      } else {
+        void window.notes.saveNote(oldPath, contentRef.current).catch(() => {})
+      }
     }
 
     // Cancel any pending autosave (it was for the old path)
@@ -105,6 +126,20 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
       return
     }
 
+    // Untitled tabs: restore from in-memory store (preserves content across tab switches)
+    if (isUntitledPath(relativePath)) {
+      const restored = getUntitledContent(relativePath)
+      contentRef.current = restored
+      setContentState(restored)
+      if (restored !== '') {
+        dirtyRef.current = true
+        setIsDirty(true)
+      } else {
+        setIsDirty(false)
+      }
+      return
+    }
+
     let cancelled = false
     setIsLoading(true)
     setSaveError(null)
@@ -116,6 +151,7 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
         dirtyRef.current = false
         setContentState(doc.content)
         setIsLoading(false)
+        setIsDirty(false)
       },
       (error) => {
         if (cancelled) return
@@ -137,10 +173,16 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
   useEffect(() => {
     return () => {
       clearAutosave()
-      if (dirtyRef.current && relativePathRef.current) {
+      const path = relativePathRef.current
+      if (!path) return
+
+      if (isUntitledPath(path)) {
+        // Preserve untitled content in memory for when tab is re-activated
+        setUntitledContent(path, contentRef.current)
+      } else if (dirtyRef.current) {
         // Fire and forget — component is unmounting
         void window.notes
-          .saveNote(relativePathRef.current, contentRef.current)
+          .saveNote(path, contentRef.current)
           .catch(() => {})
       }
     }
@@ -151,7 +193,9 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
     setContent,
     isLoading,
     isSaving,
+    isDirty,
     saveError,
-    flushSave: saveNow
+    flushSave: saveNow,
+    getContent
   }
 }

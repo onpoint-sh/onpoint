@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
-import { X, Columns2, Rows2 } from 'lucide-react'
-import { usePanesStore } from '@/stores/panes-store'
+import { X, Pin } from 'lucide-react'
+import { isUntitledPath } from '@onpoint/shared/notes'
+import { usePanesStore, findAdjacentPaneId } from '@/stores/panes-store'
 import { useNotesStore } from '@/stores/notes-store'
 
 const TAB_DND_TYPE = 'PANE_TAB'
@@ -22,6 +23,8 @@ function DraggableTab({
   index,
   relativePath,
   isActive,
+  isDirty,
+  isPinned,
   label,
   onClick,
   onMouseDown,
@@ -33,6 +36,8 @@ function DraggableTab({
   index: number
   relativePath: string
   isActive: boolean
+  isDirty: boolean
+  isPinned: boolean
   label: string
   onClick: () => void
   onMouseDown: (e: React.MouseEvent) => void
@@ -85,19 +90,23 @@ function DraggableTab({
       ref={ref}
       className="pane-tab-bar-tab"
       data-active={isActive}
+      data-dirty={isDirty}
+      data-pinned={isPinned}
       data-dragging={isDragging}
       data-drop-target={isOver}
       onClick={onClick}
       onMouseDown={onMouseDown}
       onContextMenu={onContextMenu}
     >
+      {isPinned && <Pin className="pane-tab-bar-tab-pin size-3" />}
       <span className="pane-tab-bar-tab-label">{label}</span>
+      <span className="pane-tab-bar-tab-dirty-dot" />
       <button
         className="pane-tab-bar-tab-close"
         onClick={onClose}
         tabIndex={-1}
       >
-        <X className="size-3" />
+        <X className="pane-tab-bar-close-x size-3" />
       </button>
     </div>
   )
@@ -105,18 +114,19 @@ function DraggableTab({
 
 function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   const pane = usePanesStore((s) => s.panes[paneId])
+  const dirtyTabs = usePanesStore((s) => s.dirtyTabs)
   const setActiveTab = usePanesStore((s) => s.setActiveTab)
   const closeTab = usePanesStore((s) => s.closeTab)
   const closeOtherTabs = usePanesStore((s) => s.closeOtherTabs)
   const splitPane = usePanesStore((s) => s.splitPane)
+  const splitPaneWithTab = usePanesStore((s) => s.splitPaneWithTab)
   const moveTabToPane = usePanesStore((s) => s.moveTabToPane)
+  const openUntitledTab = usePanesStore((s) => s.openUntitledTab)
+  const pinTab = usePanesStore((s) => s.pinTab)
+  const unpinTab = usePanesStore((s) => s.unpinTab)
+  const requestCloseTab = usePanesStore((s) => s.requestCloseTab)
   const notes = useNotesStore((s) => s.notes)
 
-  const [contextMenu, setContextMenu] = useState<{
-    x: number
-    y: number
-    tabId: string
-  } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Drop target for the tab bar itself (drop into empty area)
@@ -134,6 +144,7 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
 
   const resolveTitle = useCallback(
     (relativePath: string): string => {
+      if (isUntitledPath(relativePath)) return 'Untitled'
       const note = notes.find((n) => n.relativePath === relativePath)
       if (note) return note.title
       const parts = relativePath.split('/')
@@ -141,6 +152,13 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
       return filename.replace(/\.md$/, '')
     },
     [notes]
+  )
+
+  const handleRequestClose = useCallback(
+    (tabId: string) => {
+      requestCloseTab(paneId, tabId)
+    },
+    [paneId, requestCloseTab]
   )
 
   const handleTabClick = useCallback(
@@ -153,25 +171,156 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   const handleTabClose = useCallback(
     (e: React.MouseEvent, tabId: string) => {
       e.stopPropagation()
-      closeTab(paneId, tabId)
+      handleRequestClose(tabId)
     },
-    [paneId, closeTab]
+    [handleRequestClose]
   )
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, tabId: string) => {
       if (e.button === 1) {
         e.preventDefault()
-        closeTab(paneId, tabId)
+        handleRequestClose(tabId)
       }
     },
-    [paneId, closeTab]
+    [handleRequestClose]
   )
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, tabId: string) => {
+  const handleContextMenu = useCallback(async (e: React.MouseEvent, tabId: string) => {
     e.preventDefault()
-    setContextMenu({ x: e.clientX, y: e.clientY, tabId })
-  }, [])
+
+    const tab = pane?.tabs.find((t) => t.id === tabId)
+    const isPinned = Boolean(tab?.pinned)
+
+    console.log('[ctx-menu] opening', { paneId, tabId, tab, pane: !!pane })
+
+    const clickedId = await window.contextMenu.show([
+      isPinned
+        ? { id: 'unpin', label: 'Unpin Tab' }
+        : { id: 'pin', label: 'Pin Tab' },
+      { id: 'sep-1', label: '', separator: true },
+      { id: 'close', label: 'Close' },
+      { id: 'close-others', label: 'Close Others' },
+      { id: 'close-all', label: 'Close All' },
+      { id: 'sep-2', label: '', separator: true },
+      { id: 'split-right', label: 'Split Right' },
+      {
+        id: 'split-move', label: 'Split && Move',
+        submenu: [
+          { id: 'split-up', label: 'Split Up' },
+          { id: 'split-down', label: 'Split Down' },
+          { id: 'split-left', label: 'Split Left' },
+          { id: 'split-right-move', label: 'Split Right' },
+          { id: 'sep-sm', label: '', separator: true },
+          { id: 'move-above', label: 'Move Above' },
+          { id: 'move-below', label: 'Move Below' },
+          { id: 'move-left', label: 'Move Left' },
+          { id: 'move-right', label: 'Move Right' }
+        ]
+      },
+      { id: 'sep-3', label: '', separator: true },
+      { id: 'move-to-window', label: 'Move into New Window' }
+    ])
+
+    console.log('[ctx-menu] clicked:', clickedId)
+
+    try {
+      switch (clickedId) {
+        case 'pin':
+          console.log('[ctx-menu] pinTab', paneId, tabId)
+          pinTab(paneId, tabId)
+          break
+        case 'unpin':
+          console.log('[ctx-menu] unpinTab', paneId, tabId)
+          unpinTab(paneId, tabId)
+          break
+        case 'close':
+          console.log('[ctx-menu] close', paneId, tabId)
+          handleRequestClose(tabId)
+          break
+        case 'close-others':
+          console.log('[ctx-menu] closeOtherTabs', paneId, tabId)
+          closeOtherTabs(paneId, tabId)
+          break
+        case 'close-all':
+          console.log('[ctx-menu] closeAll', paneId)
+          for (const t of usePanesStore.getState().panes[paneId]?.tabs ?? []) {
+            closeTab(paneId, t.id)
+          }
+          break
+        case 'split-right':
+          console.log('[ctx-menu] splitPane row', paneId)
+          splitPane(paneId, 'row')
+          break
+        case 'split-up':
+          console.log('[ctx-menu] splitPaneWithTab column/first', paneId, tabId)
+          splitPaneWithTab(paneId, 'column', 'first', paneId, tabId)
+          break
+        case 'split-down':
+          console.log('[ctx-menu] splitPaneWithTab column/second', paneId, tabId)
+          splitPaneWithTab(paneId, 'column', 'second', paneId, tabId)
+          break
+        case 'split-left':
+          console.log('[ctx-menu] splitPaneWithTab row/first', paneId, tabId)
+          splitPaneWithTab(paneId, 'row', 'first', paneId, tabId)
+          break
+        case 'split-right-move':
+          console.log('[ctx-menu] splitPaneWithTab row/second', paneId, tabId)
+          splitPaneWithTab(paneId, 'row', 'second', paneId, tabId)
+          break
+        case 'move-above': {
+          const state = usePanesStore.getState()
+          const target = findAdjacentPaneId(state.layout, paneId, 'up')
+          console.log('[ctx-menu] move-above', { target, layout: JSON.stringify(state.layout) })
+          if (target) moveTabToPane(paneId, tabId, target)
+          else splitPaneWithTab(paneId, 'column', 'first', paneId, tabId)
+          break
+        }
+        case 'move-below': {
+          const state = usePanesStore.getState()
+          const target = findAdjacentPaneId(state.layout, paneId, 'down')
+          console.log('[ctx-menu] move-below', { target, layout: JSON.stringify(state.layout) })
+          if (target) moveTabToPane(paneId, tabId, target)
+          else splitPaneWithTab(paneId, 'column', 'second', paneId, tabId)
+          break
+        }
+        case 'move-left': {
+          const state = usePanesStore.getState()
+          const target = findAdjacentPaneId(state.layout, paneId, 'left')
+          console.log('[ctx-menu] move-left', { target, layout: JSON.stringify(state.layout) })
+          if (target) moveTabToPane(paneId, tabId, target)
+          else splitPaneWithTab(paneId, 'row', 'first', paneId, tabId)
+          break
+        }
+        case 'move-right': {
+          const state = usePanesStore.getState()
+          const target = findAdjacentPaneId(state.layout, paneId, 'right')
+          console.log('[ctx-menu] move-right', { target, layout: JSON.stringify(state.layout) })
+          if (target) moveTabToPane(paneId, tabId, target)
+          else splitPaneWithTab(paneId, 'row', 'second', paneId, tabId)
+          break
+        }
+        case 'move-to-window': {
+          console.log('[ctx-menu] move-to-window', { tab })
+          if (tab) {
+            const detached = await window.windowControls.detachTab(tab.relativePath, true)
+            console.log('[ctx-menu] detachTab result:', detached)
+            if (detached) closeTab(paneId, tabId)
+          }
+          break
+        }
+        default:
+          console.log('[ctx-menu] unhandled clickedId:', clickedId)
+      }
+    } catch (err) {
+      console.error('[ctx-menu] error handling action:', clickedId, err)
+    }
+  }, [paneId, pane, pinTab, unpinTab, handleRequestClose, closeOtherTabs, closeTab, splitPane, splitPaneWithTab, moveTabToPane])
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.pane-tab-bar-tab')) return
+    openUntitledTab(paneId)
+  }, [paneId, openUntitledTab])
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (scrollContainerRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -182,114 +331,67 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   if (!pane) return null
 
   return (
-    <>
-      <div className="pane-tab-bar" data-drop-target={isBarOver} onWheel={handleWheel}>
-        <div ref={(node) => { barDropRef(node); scrollContainerRef.current = node }} className="pane-tab-bar-scroll">
-          {pane.tabs.map((tab, index) => (
-            <DraggableTab
-              key={tab.id}
-              tabId={tab.id}
-              paneId={paneId}
-              index={index}
-              relativePath={tab.relativePath}
-              isActive={tab.id === pane.activeTabId}
-              label={resolveTitle(tab.relativePath)}
-              onClick={() => handleTabClick(tab.id)}
-              onMouseDown={(e) => handleMouseDown(e, tab.id)}
-              onContextMenu={(e) => handleContextMenu(e, tab.id)}
-              onClose={(e) => handleTabClose(e, tab.id)}
-            />
-          ))}
-        </div>
-        <div className="pane-tab-bar-actions">
-          <button
-            className="pane-tab-bar-action-btn"
-            onClick={() => splitPane(paneId, 'row')}
-            title="Split Right"
-          >
-            <Columns2 className="size-3.5" />
-          </button>
-          <button
-            className="pane-tab-bar-action-btn"
-            onClick={() => splitPane(paneId, 'column')}
-            title="Split Down"
-          >
-            <Rows2 className="size-3.5" />
-          </button>
-        </div>
+    <div className="pane-tab-bar" data-drop-target={isBarOver} onWheel={handleWheel}>
+      <div ref={(node) => { barDropRef(node); scrollContainerRef.current = node }} className="pane-tab-bar-scroll" onDoubleClick={handleDoubleClick}>
+        {pane.tabs.map((tab, index) => (
+          <DraggableTab
+            key={tab.id}
+            tabId={tab.id}
+            paneId={paneId}
+            index={index}
+            relativePath={tab.relativePath}
+            isActive={tab.id === pane.activeTabId}
+            isDirty={Boolean(dirtyTabs[tab.id])}
+            isPinned={Boolean(tab.pinned)}
+            label={resolveTitle(tab.relativePath)}
+            onClick={() => handleTabClick(tab.id)}
+            onMouseDown={(e) => handleMouseDown(e, tab.id)}
+            onContextMenu={(e) => handleContextMenu(e, tab.id)}
+            onClose={(e) => handleTabClose(e, tab.id)}
+          />
+        ))}
       </div>
-
-      {contextMenu ? (
-        <PaneTabContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(null)}
-          onCloseTab={() => {
-            closeTab(paneId, contextMenu.tabId)
-            setContextMenu(null)
-          }}
-          onCloseOthers={() => {
-            closeOtherTabs(paneId, contextMenu.tabId)
-            setContextMenu(null)
-          }}
-          onCloseAll={() => {
-            const tabIds = pane.tabs.map((t) => t.id)
-            for (const id of tabIds) {
-              closeTab(paneId, id)
-            }
-            setContextMenu(null)
-          }}
-        />
-      ) : null}
-    </>
+    </div>
   )
 }
 
-type PaneTabContextMenuProps = {
-  x: number
-  y: number
-  onClose: () => void
-  onCloseTab: () => void
-  onCloseOthers: () => void
-  onCloseAll: () => void
+type CloseConfirmDialogProps = {
+  label: string
+  onSave: () => void
+  onDontSave: () => void
+  onCancel: () => void
 }
 
-function PaneTabContextMenu({
-  x,
-  y,
-  onClose,
-  onCloseTab,
-  onCloseOthers,
-  onCloseAll
-}: PaneTabContextMenuProps): React.JSX.Element {
+function CloseConfirmDialog({
+  label,
+  onSave,
+  onDontSave,
+  onCancel
+}: CloseConfirmDialogProps): React.JSX.Element {
   return (
     <>
-      <div className="fixed inset-0 z-50" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }} />
-      <div
-        className="fixed z-50 min-w-[140px] rounded-md border border-border bg-popover py-1 text-[0.78rem] text-popover-foreground shadow-md"
-        style={{ left: x, top: y }}
-      >
-        <button
-          className="flex w-full items-center px-3 py-1.5 text-left hover:bg-accent hover:text-accent-foreground"
-          onClick={onCloseTab}
-        >
-          Close
-        </button>
-        <button
-          className="flex w-full items-center px-3 py-1.5 text-left hover:bg-accent hover:text-accent-foreground"
-          onClick={onCloseOthers}
-        >
-          Close Others
-        </button>
-        <button
-          className="flex w-full items-center px-3 py-1.5 text-left text-destructive hover:bg-accent"
-          onClick={onCloseAll}
-        >
-          Close All
-        </button>
+      <div className="close-confirm-overlay" onClick={onCancel} />
+      <div className="close-confirm-dialog">
+        <p className="close-confirm-title">
+          Do you want to save the changes you made to {label}?
+        </p>
+        <p className="close-confirm-description">
+          Your changes will be lost if you don&apos;t save them.
+        </p>
+        <div className="close-confirm-actions">
+          <button className="close-confirm-btn close-confirm-btn-primary" onClick={onSave}>
+            Save
+          </button>
+          <button className="close-confirm-btn close-confirm-btn-secondary" onClick={onDontSave}>
+            Don&apos;t Save
+          </button>
+          <button className="close-confirm-btn close-confirm-btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
       </div>
     </>
   )
 }
 
-export { PaneTabBar, TAB_DND_TYPE, type TabDragItem }
+export { PaneTabBar, CloseConfirmDialog, TAB_DND_TYPE, type TabDragItem }

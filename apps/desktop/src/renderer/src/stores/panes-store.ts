@@ -2,7 +2,9 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { MosaicNode, MosaicDirection, MosaicBranch } from 'react-mosaic-component'
 import { getLeaves, createRemoveUpdate, updateTree } from 'react-mosaic-component'
+import { isUntitledPath, UNTITLED_PREFIX } from '@onpoint/shared/notes'
 import { WINDOW_ID } from '@/lib/detached-window'
+import { deleteUntitledContent } from '@/lib/untitled-content-store'
 
 // Migrate old unkeyed localStorage to keyed format for the "main" window
 if (WINDOW_ID === 'main') {
@@ -17,6 +19,7 @@ if (WINDOW_ID === 'main') {
 export type PaneTab = {
   id: string
   relativePath: string
+  pinned?: boolean
 }
 
 export type Pane = {
@@ -38,6 +41,7 @@ export type PanesStoreState = {
   layout: MosaicNode<string> | null
   panes: Record<string, Pane>
   focusedPaneId: string | null
+  dirtyTabs: Record<string, boolean>
 
   // Pane operations
   createPane: (relativePath: string) => string
@@ -56,12 +60,28 @@ export type PanesStoreState = {
 
   // Tab operations
   openTab: (relativePath: string, paneId?: string) => string
+  openUntitledTab: (paneId?: string) => string
   closeTab: (paneId: string, tabId: string) => void
   closeOtherTabs: (paneId: string, tabId: string) => void
   setActiveTab: (paneId: string, tabId: string) => void
   reorderTab: (paneId: string, fromIndex: number, toIndex: number) => void
   reopenClosedTab: (paneId: string) => string | null
   moveTabToPane: (fromPaneId: string, tabId: string, toPaneId: string) => void
+  pinTab: (paneId: string, tabId: string) => void
+  unpinTab: (paneId: string, tabId: string) => void
+
+  // Dirty tracking (non-persisted)
+  markTabDirty: (tabId: string) => void
+  markTabClean: (tabId: string) => void
+
+  // Tab close guard (non-persisted)
+  pendingCloseTab: { paneId: string; tabId: string } | null
+  setPendingCloseTab: (value: { paneId: string; tabId: string } | null) => void
+  requestCloseTab: (paneId: string, tabId: string) => void
+
+  // Window close guard (non-persisted)
+  windowCloseRequested: boolean
+  setWindowCloseRequested: (value: boolean) => void
 
   // Cross-cutting
   removeTabsByPath: (relativePath: string) => void
@@ -122,6 +142,9 @@ export const usePanesStore = create<PanesStoreState>()(
       layout: null,
       panes: {},
       focusedPaneId: null,
+      dirtyTabs: {},
+      pendingCloseTab: null,
+      windowCloseRequested: false,
 
       createPane: (relativePath: string) => {
         const paneId = createPaneId()
@@ -239,22 +262,25 @@ export const usePanesStore = create<PanesStoreState>()(
 
         const newPanes = { ...state.panes, [newPaneId]: newPane }
 
-        // Remove tab from source pane
-        const fromTabs = fromPane.tabs.filter((t) => t.id !== tabId)
-        if (fromTabs.length === 0) {
-          delete newPanes[fromPaneId]
-          newLayout = removePaneFromLayout(newLayout, fromPaneId) ?? newLayout
-        } else {
-          const fromIndex = fromPane.tabs.findIndex((t) => t.id === tabId)
-          const fromActiveTabId =
-            fromPane.activeTabId === tabId
-              ? pickNextActiveTab(fromTabs, fromIndex)
-              : fromPane.activeTabId
+        // Remove tab from source pane (skip if it's the last tab in the
+        // same pane we just split — removing it would collapse the split)
+        if (!(fromPaneId === targetPaneId && fromPane.tabs.length === 1)) {
+          const fromTabs = fromPane.tabs.filter((t) => t.id !== tabId)
+          if (fromTabs.length === 0) {
+            delete newPanes[fromPaneId]
+            newLayout = removePaneFromLayout(newLayout, fromPaneId) ?? newLayout
+          } else {
+            const fromIndex = fromPane.tabs.findIndex((t) => t.id === tabId)
+            const fromActiveTabId =
+              fromPane.activeTabId === tabId
+                ? pickNextActiveTab(fromTabs, fromIndex)
+                : fromPane.activeTabId
 
-          newPanes[fromPaneId] = {
-            ...fromPane,
-            tabs: fromTabs,
-            activeTabId: fromActiveTabId
+            newPanes[fromPaneId] = {
+              ...fromPane,
+              tabs: fromTabs,
+              activeTabId: fromActiveTabId
+            }
           }
         }
 
@@ -339,6 +365,41 @@ export const usePanesStore = create<PanesStoreState>()(
         return targetPaneId
       },
 
+      openUntitledTab: (paneId?: string) => {
+        const untitledPath = `${UNTITLED_PREFIX}${crypto.randomUUID()}`
+        return get().openTab(untitledPath, paneId)
+      },
+
+      markTabDirty: (tabId: string) => {
+        const state = get()
+        if (state.dirtyTabs[tabId]) return
+        set({ dirtyTabs: { ...state.dirtyTabs, [tabId]: true } })
+      },
+
+      markTabClean: (tabId: string) => {
+        const state = get()
+        if (!state.dirtyTabs[tabId]) return
+        const { [tabId]: _, ...rest } = state.dirtyTabs
+        set({ dirtyTabs: rest })
+      },
+
+      setPendingCloseTab: (value) => {
+        set({ pendingCloseTab: value })
+      },
+
+      requestCloseTab: (paneId: string, tabId: string) => {
+        const state = get()
+        if (state.dirtyTabs[tabId]) {
+          set({ pendingCloseTab: { paneId, tabId } })
+        } else {
+          get().closeTab(paneId, tabId)
+        }
+      },
+
+      setWindowCloseRequested: (value: boolean) => {
+        set({ windowCloseRequested: value })
+      },
+
       closeTab: (paneId: string, tabId: string) => {
         const state = get()
         const pane = state.panes[paneId]
@@ -347,7 +408,19 @@ export const usePanesStore = create<PanesStoreState>()(
         const index = pane.tabs.findIndex((t) => t.id === tabId)
         if (index === -1) return
 
+        // Clean up dirty tracking
+        if (state.dirtyTabs[tabId]) {
+          const { [tabId]: _, ...rest } = state.dirtyTabs
+          set({ dirtyTabs: rest })
+        }
+
         const closingTab = pane.tabs[index]
+
+        // Clean up untitled content store
+        if (isUntitledPath(closingTab.relativePath)) {
+          deleteUntitledContent(closingTab.relativePath)
+        }
+
         const nextTabs = pane.tabs.filter((t) => t.id !== tabId)
 
         // If last tab, close the pane
@@ -394,11 +467,12 @@ export const usePanesStore = create<PanesStoreState>()(
         const pane = state.panes[paneId]
         if (!pane) return
 
-        const kept = pane.tabs.find((t) => t.id === tabId)
-        if (!kept) return
+        const keptTabs = pane.tabs.filter((t) => t.id === tabId || t.pinned)
+        if (keptTabs.length === 0) return
 
+        const keptIds = new Set(keptTabs.map((t) => t.id))
         const closedPaths = pane.tabs
-          .filter((t) => t.id !== tabId)
+          .filter((t) => !keptIds.has(t.id))
           .map((t) => t.relativePath)
 
         const recentlyClosedPaths = [
@@ -411,7 +485,7 @@ export const usePanesStore = create<PanesStoreState>()(
             ...state.panes,
             [paneId]: {
               ...pane,
-              tabs: [kept],
+              tabs: keptTabs,
               activeTabId: tabId,
               recentlyClosedPaths
             }
@@ -445,6 +519,11 @@ export const usePanesStore = create<PanesStoreState>()(
         ) {
           return
         }
+
+        // Prevent dragging across pinned/unpinned boundary
+        const fromPinned = Boolean(pane.tabs[fromIndex].pinned)
+        const toPinned = Boolean(pane.tabs[toIndex].pinned)
+        if (fromPinned !== toPinned) return
 
         const nextTabs = [...pane.tabs]
         const [moved] = nextTabs.splice(fromIndex, 1)
@@ -519,6 +598,54 @@ export const usePanesStore = create<PanesStoreState>()(
         }
       },
 
+      pinTab: (paneId: string, tabId: string) => {
+        const state = get()
+        const pane = state.panes[paneId]
+        if (!pane) return
+
+        const tabIndex = pane.tabs.findIndex((t) => t.id === tabId)
+        if (tabIndex === -1 || pane.tabs[tabIndex].pinned) return
+
+        const nextTabs = [...pane.tabs]
+        const [tab] = nextTabs.splice(tabIndex, 1)
+        const pinnedTab = { ...tab, pinned: true }
+
+        // Insert at end of pinned group
+        const lastPinnedIndex = nextTabs.findLastIndex((t) => t.pinned)
+        nextTabs.splice(lastPinnedIndex + 1, 0, pinnedTab)
+
+        set({
+          panes: {
+            ...state.panes,
+            [paneId]: { ...pane, tabs: nextTabs }
+          }
+        })
+      },
+
+      unpinTab: (paneId: string, tabId: string) => {
+        const state = get()
+        const pane = state.panes[paneId]
+        if (!pane) return
+
+        const tabIndex = pane.tabs.findIndex((t) => t.id === tabId)
+        if (tabIndex === -1 || !pane.tabs[tabIndex].pinned) return
+
+        const nextTabs = [...pane.tabs]
+        const [tab] = nextTabs.splice(tabIndex, 1)
+        const unpinnedTab = { ...tab, pinned: undefined }
+
+        // Insert at start of unpinned group
+        const lastPinnedIndex = nextTabs.findLastIndex((t) => t.pinned)
+        nextTabs.splice(lastPinnedIndex + 1, 0, unpinnedTab)
+
+        set({
+          panes: {
+            ...state.panes,
+            [paneId]: { ...pane, tabs: nextTabs }
+          }
+        })
+      },
+
       removeTabsByPath: (relativePath: string) => {
         const state = get()
         const newPanes = { ...state.panes }
@@ -580,7 +707,7 @@ export const usePanesStore = create<PanesStoreState>()(
         const panesToRemove: string[] = []
 
         for (const [paneId, pane] of Object.entries(state.panes)) {
-          const validTabs = pane.tabs.filter((t) => existingPaths.has(t.relativePath))
+          const validTabs = pane.tabs.filter((t) => !isUntitledPath(t.relativePath) && existingPaths.has(t.relativePath))
           const validRecentlyClosedPaths = pane.recentlyClosedPaths.filter((p) =>
             existingPaths.has(p)
           )
@@ -672,6 +799,65 @@ export const usePanesStore = create<PanesStoreState>()(
     }
   )
 )
+
+// ── Window close guard ──
+// Prevent closing window when tabs have unsaved changes.
+// Sets `windowCloseRequested` so the UI can show a confirmation dialog.
+let _bypassBeforeUnload = false
+
+export function forceWindowClose(): void {
+  _bypassBeforeUnload = true
+  window.close()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (e) => {
+    if (_bypassBeforeUnload) return
+    const { dirtyTabs } = usePanesStore.getState()
+    if (Object.keys(dirtyTabs).length > 0) {
+      e.preventDefault()
+      e.returnValue = ''
+      usePanesStore.getState().setWindowCloseRequested(true)
+    }
+  })
+}
+
+// Helper: find an adjacent pane in a given direction
+export function findAdjacentPaneId(
+  layout: MosaicNode<string> | null,
+  paneId: string,
+  direction: 'up' | 'down' | 'left' | 'right'
+): string | null {
+  if (!layout || typeof layout === 'string') return null
+
+  const path = findPaneIdInLayout(layout, paneId)
+  if (!path) return null
+
+  const mosaicDir: MosaicDirection =
+    direction === 'up' || direction === 'down' ? 'column' : 'row'
+  const myBranch: MosaicBranch =
+    direction === 'up' || direction === 'left' ? 'second' : 'first'
+  const targetBranch: MosaicBranch = myBranch === 'first' ? 'second' : 'first'
+
+  for (let i = path.length - 1; i >= 0; i--) {
+    if (path[i] !== myBranch) continue
+
+    // Walk to the parent node at level i
+    let parent: MosaicNode<string> = layout
+    for (let j = 0; j < i; j++) {
+      if (typeof parent !== 'string') parent = parent[path[j]]
+    }
+    if (typeof parent === 'string') continue
+
+    if (parent.direction === mosaicDir) {
+      const subtree = parent[targetBranch]
+      const leaves = typeof subtree === 'string' ? [subtree] : getLeaves(subtree)
+      return leaves[0] ?? null
+    }
+  }
+
+  return null
+}
 
 // Helper: replace a node at a given path in the mosaic tree
 function replaceAtPath(

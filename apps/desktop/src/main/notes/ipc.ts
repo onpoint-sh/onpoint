@@ -17,6 +17,7 @@ import {
   type NoteSummary,
   type RenameFolderResult,
   type RenameNoteResult,
+  type SaveNoteAsResult,
   type SaveNoteResult
 } from '@onpoint/shared/notes'
 import {
@@ -43,6 +44,7 @@ function removeNotesHandlers(): void {
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.open)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.create)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.save)
+  ipcMain.removeHandler(NOTES_IPC_CHANNELS.saveAs)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.rename)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.delete)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.archive)
@@ -207,6 +209,51 @@ async function saveNote(
   return saveResult
 }
 
+async function saveNoteAs(
+  event: IpcMainInvokeEvent,
+  windowId: string,
+  content: string
+): Promise<SaveNoteAsResult | null> {
+  const vaultPath = await ensureConfiguredVaultPath(windowId)
+  const browserWindow = getWindowFromEvent(event)
+
+  const dialogOptions = {
+    title: 'Save Note',
+    defaultPath: vaultPath,
+    filters: [
+      { name: 'Markdown', extensions: ['md'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  }
+
+  const result = browserWindow
+    ? await dialog.showSaveDialog(browserWindow, dialogOptions)
+    : await dialog.showSaveDialog(dialogOptions)
+
+  if (result.canceled || !result.filePath) {
+    return null
+  }
+
+  const { promises: fs } = await import('node:fs')
+  const { relative } = await import('node:path')
+
+  const filePath = result.filePath
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  await fs.writeFile(tempPath, content, 'utf-8')
+  await fs.rename(tempPath, filePath)
+
+  const fileStats = await fs.stat(filePath)
+  const relativePath = relative(vaultPath, filePath).replace(/\\/g, '/')
+
+  const config = await loadNotesConfig(windowId)
+  await saveNotesConfig(
+    windowId,
+    mergeConfig(config, { lastOpenedRelativePath: relativePath })
+  )
+
+  return { relativePath, mtimeMs: fileStats.mtimeMs }
+}
+
 async function renameNote(
   windowId: string,
   relativePath: string,
@@ -316,6 +363,10 @@ export function registerNotesIpc(): () => void {
 
   ipcMain.handle(NOTES_IPC_CHANNELS.save, (event, relativePath: string, content: string) => {
     return saveNote(resolveWindowId(event), relativePath, content)
+  })
+
+  ipcMain.handle(NOTES_IPC_CHANNELS.saveAs, (event, content: string) => {
+    return saveNoteAs(event, resolveWindowId(event), content)
   })
 
   ipcMain.handle(

@@ -8,6 +8,29 @@ type ContextMenuItemInput = {
   label: string
   separator?: boolean
   accelerator?: string
+  submenu?: ContextMenuItemInput[]
+}
+
+function buildTemplate(
+  items: ContextMenuItemInput[],
+  onClickItem: (id: string) => void
+): Electron.MenuItemConstructorOptions[] {
+  return items.map((item) => {
+    if (item.separator) {
+      return { type: 'separator' as const }
+    }
+    if (item.submenu) {
+      return {
+        label: item.label,
+        submenu: buildTemplate(item.submenu, onClickItem)
+      }
+    }
+    return {
+      label: item.label,
+      accelerator: item.accelerator,
+      click: () => onClickItem(item.id)
+    }
+  })
 }
 
 export function registerContextMenu(): void {
@@ -23,17 +46,8 @@ export function registerContextMenu(): void {
       return new Promise((resolve) => {
         let clickedId: string | null = null
 
-        const template: Electron.MenuItemConstructorOptions[] = items.map((item) => {
-          if (item.separator) {
-            return { type: 'separator' as const }
-          }
-          return {
-            label: item.label,
-            accelerator: item.accelerator,
-            click: () => {
-              clickedId = item.id
-            }
-          }
+        const template = buildTemplate(items, (id) => {
+          clickedId = id
         })
 
         const menu = Menu.buildFromTemplate(template)

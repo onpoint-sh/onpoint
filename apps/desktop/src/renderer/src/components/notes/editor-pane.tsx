@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useDragLayer, useDrop } from 'react-dnd'
 import type { MosaicDirection } from 'react-mosaic-component'
 import { usePanesStore } from '@/stores/panes-store'
@@ -7,27 +7,48 @@ import { PaneEditor } from './pane-editor'
 
 type EdgePosition = 'left' | 'right' | 'top' | 'bottom'
 
-function EdgeDropZone({
-  position,
+function getEdgeFromPoint(rect: DOMRect, x: number, y: number): EdgePosition {
+  const relX = (x - rect.left) / rect.width
+  const relY = (y - rect.top) / rect.height
+  // Diagonal split: top-left→bottom-right (y=x) and top-right→bottom-left (y=1-x)
+  if (relY < relX && relY < 1 - relX) return 'top'
+  if (relY > relX && relY > 1 - relX) return 'bottom'
+  if (relX < 0.5) return 'left'
+  return 'right'
+}
+
+function SplitDropOverlay({
   paneId,
   onDrop
 }: {
-  position: EdgePosition
   paneId: string
   onDrop: (item: TabDragItem, position: EdgePosition) => void
 }): React.JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const edgeRef = useRef<EdgePosition | null>(null)
+  const [activeEdge, setActiveEdge] = useState<EdgePosition | null>(null)
+
   const [{ isOver, canDrop }, dropRef] = useDrop<TabDragItem, unknown, { isOver: boolean; canDrop: boolean }>({
     accept: TAB_DND_TYPE,
     canDrop(item) {
-      // Don't allow splitting if dragging the only tab in this same pane
       if (item.paneId === paneId) {
         const pane = usePanesStore.getState().panes[paneId]
         if (pane && pane.tabs.length <= 1) return false
       }
       return true
     },
+    hover(_item, monitor) {
+      const offset = monitor.getClientOffset()
+      const el = containerRef.current
+      if (!offset || !el) return
+      const edge = getEdgeFromPoint(el.getBoundingClientRect(), offset.x, offset.y)
+      if (edge !== edgeRef.current) {
+        edgeRef.current = edge
+        setActiveEdge(edge)
+      }
+    },
     drop(item) {
-      onDrop(item, position)
+      if (edgeRef.current) onDrop(item, edgeRef.current)
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
@@ -35,12 +56,17 @@ function EdgeDropZone({
     })
   })
 
+  const showHighlight = isOver && canDrop && activeEdge
+
   return (
     <div
-      ref={(node) => { dropRef(node) }}
-      className={`edge-drop-zone edge-drop-zone-${position}`}
-      data-over={isOver && canDrop}
-    />
+      ref={(node) => { containerRef.current = node; dropRef(node) }}
+      className="split-drop-overlay"
+    >
+      {showHighlight && (
+        <div className={`split-drop-highlight split-drop-highlight-${activeEdge}`} />
+      )}
+    </div>
   )
 }
 
@@ -118,11 +144,8 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
     >
       <PaneTabBar paneId={paneId} />
       <div ref={(node) => { centerDropRef(node) }} className="editor-pane-body" data-dragging={isTabDragging}>
-        <PaneEditor relativePath={relativePath} />
-        <EdgeDropZone position="left" paneId={paneId} onDrop={handleEdgeDrop} />
-        <EdgeDropZone position="right" paneId={paneId} onDrop={handleEdgeDrop} />
-        <EdgeDropZone position="top" paneId={paneId} onDrop={handleEdgeDrop} />
-        <EdgeDropZone position="bottom" paneId={paneId} onDrop={handleEdgeDrop} />
+        <PaneEditor key={activeTab?.id} tabId={activeTab?.id} relativePath={relativePath} />
+        <SplitDropOverlay paneId={paneId} onDrop={handleEdgeDrop} />
       </div>
     </div>
   )

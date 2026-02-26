@@ -70,6 +70,9 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
       mainWindow.maximize()
     }
     mainWindow.show()
+    if (is.dev) {
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.on('maximize', () => {

@@ -2,7 +2,7 @@ export const SETTINGS_SECTION_IDS = ['appearance', 'keyboard-shortcuts', 'ghost-
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
 
-export const DEFAULT_SETTINGS_SECTION_ID: SettingsSectionId = 'keyboard-shortcuts'
+export const DEFAULT_SETTINGS_SECTION_ID: SettingsSectionId = SETTINGS_SECTION_IDS[0]
 
 export function getSettingsSectionPath(sectionId: SettingsSectionId): string {
   return `/settings/${sectionId}`

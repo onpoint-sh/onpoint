@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tree, type TreeApi } from 'react-arborist'
 import { useDragDropManager } from 'react-dnd'
-import { ChevronRight, FilePlus, FolderOpen, FolderPlus, Settings } from 'lucide-react'
+import {
+  ChevronRight,
+  ChevronsDownUp,
+  FilePlus,
+  FolderOpen,
+  FolderPlus,
+  Settings,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
@@ -353,6 +360,14 @@ function NotesSidebar(): React.JSX.Element {
                 }}
               >
                 <FolderPlus className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex size-6 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
+                title="Collapse All Folders"
+                onClick={() => treeRef.current?.closeAll()}
+              >
+                <ChevronsDownUp className="size-3.5" />
               </button>
               <button
                 type="button"

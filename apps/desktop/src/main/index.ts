@@ -89,7 +89,7 @@ app.whenReady().then(() => {
   // Detach tab handler — creates a new first-class window for the dragged tab
   ipcMain.handle(
     WINDOW_IPC_CHANNELS.detachTab,
-    async (event: IpcMainInvokeEvent, relativePath: string): Promise<boolean> => {
+    async (event: IpcMainInvokeEvent, relativePath: string, force?: boolean): Promise<boolean> => {
       const sourceWindow = BrowserWindow.fromWebContents(event.sender)
       if (!sourceWindow || sourceWindow.isDestroyed()) return false
       const parentWindowId = windowRegistry.getWindowId(sourceWindow) ?? 'main'
@@ -104,7 +104,7 @@ app.whenReady().then(() => {
         cursor.y < bounds.y - margin ||
         cursor.y > bounds.y + bounds.height + margin
 
-      if (!isOutside) return false
+      if (!force && !isOutside) return false
 
       const newWindowId = createWindowId()
 

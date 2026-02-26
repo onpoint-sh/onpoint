@@ -51,6 +51,17 @@ export type RenameFolderResult = {
   relativePath: string
 }
 
+export type SaveNoteAsResult = {
+  relativePath: string
+  mtimeMs: number
+}
+
+export const UNTITLED_PREFIX = 'untitled:'
+
+export function isUntitledPath(path: string): boolean {
+  return path.startsWith(UNTITLED_PREFIX)
+}
+
 export const NOTES_IPC_CHANNELS = {
   getConfig: 'notes:get-config',
   pickVault: 'notes:pick-vault',
@@ -59,6 +70,7 @@ export const NOTES_IPC_CHANNELS = {
   open: 'notes:open',
   create: 'notes:create',
   save: 'notes:save',
+  saveAs: 'notes:save-as',
   rename: 'notes:rename',
   delete: 'notes:delete',
   archive: 'notes:archive',

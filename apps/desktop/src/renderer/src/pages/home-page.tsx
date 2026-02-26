@@ -4,10 +4,13 @@ import { useDragDropManager } from 'react-dnd'
 import { FolderOpen, FilePlus2, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import 'react-mosaic-component/react-mosaic-component.css'
-import { usePanesStore } from '@/stores/panes-store'
+import { isUntitledPath } from '@onpoint/shared/notes'
+import { usePanesStore, forceWindowClose } from '@/stores/panes-store'
 import { useNotesStore } from '@/stores/notes-store'
 import { DEFAULT_SETTINGS_SECTION_ID, getSettingsSectionPath } from '@/pages/settings-sections'
 import { EditorPane } from '@/components/notes/editor-pane'
+import { CloseConfirmDialog } from '@/components/notes/pane-tab-bar'
+import { tabSaveCallbacks } from '@/lib/tab-save-callbacks'
 
 function WelcomePage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -72,6 +75,115 @@ function WelcomePage(): React.JSX.Element {
   )
 }
 
+function TabCloseGuard(): React.JSX.Element | null {
+  const pendingCloseTab = usePanesStore((s) => s.pendingCloseTab)
+  const panes = usePanesStore((s) => s.panes)
+  const setPendingCloseTab = usePanesStore((s) => s.setPendingCloseTab)
+  const closeTab = usePanesStore((s) => s.closeTab)
+  const notes = useNotesStore((s) => s.notes)
+
+  const handleSave = useCallback(async () => {
+    if (!pendingCloseTab) return
+    const { paneId, tabId } = pendingCloseTab
+    const cb = tabSaveCallbacks.get(tabId)
+    if (cb) {
+      const saved = await cb()
+      if (!saved) return // User cancelled Save As dialog
+    }
+    closeTab(paneId, tabId)
+    setPendingCloseTab(null)
+  }, [pendingCloseTab, closeTab, setPendingCloseTab])
+
+  const handleDontSave = useCallback(() => {
+    if (!pendingCloseTab) return
+    closeTab(pendingCloseTab.paneId, pendingCloseTab.tabId)
+    setPendingCloseTab(null)
+  }, [pendingCloseTab, closeTab, setPendingCloseTab])
+
+  const handleCancel = useCallback(() => {
+    setPendingCloseTab(null)
+  }, [setPendingCloseTab])
+
+  if (!pendingCloseTab) return null
+
+  // Resolve label
+  const pane = panes[pendingCloseTab.paneId]
+  const tab = pane?.tabs.find((t) => t.id === pendingCloseTab.tabId)
+  let label = 'Untitled'
+  if (tab && !isUntitledPath(tab.relativePath)) {
+    const note = notes.find((n) => n.relativePath === tab.relativePath)
+    if (note) {
+      label = note.title
+    } else {
+      const parts = tab.relativePath.split('/')
+      label = parts[parts.length - 1].replace(/\.md$/, '')
+    }
+  }
+
+  return (
+    <CloseConfirmDialog
+      label={label}
+      onSave={handleSave}
+      onDontSave={handleDontSave}
+      onCancel={handleCancel}
+    />
+  )
+}
+
+function WindowCloseGuard(): React.JSX.Element | null {
+  const windowCloseRequested = usePanesStore((s) => s.windowCloseRequested)
+  const setWindowCloseRequested = usePanesStore((s) => s.setWindowCloseRequested)
+
+  const handleSave = useCallback(async () => {
+    // Save all dirty tabs, then force close
+    const { dirtyTabs, panes } = usePanesStore.getState()
+    const dirtyIds = Object.keys(dirtyTabs)
+
+    for (const tabId of dirtyIds) {
+      const cb = tabSaveCallbacks.get(tabId)
+      if (cb) {
+        const saved = await cb()
+        if (!saved) {
+          // User cancelled a Save As dialog — abort the close
+          setWindowCloseRequested(false)
+          return
+        }
+      }
+    }
+
+    // Also flush any non-dirty saved notes that might have pending autosave
+    for (const pane of Object.values(panes)) {
+      for (const tab of pane.tabs) {
+        const cb = tabSaveCallbacks.get(tab.id)
+        if (cb && !dirtyTabs[tab.id]) {
+          await cb().catch(() => {})
+        }
+      }
+    }
+
+    forceWindowClose()
+  }, [setWindowCloseRequested])
+
+  const handleDontSave = useCallback(() => {
+    forceWindowClose()
+  }, [])
+
+  const handleCancel = useCallback(() => {
+    setWindowCloseRequested(false)
+  }, [setWindowCloseRequested])
+
+  if (!windowCloseRequested) return null
+
+  return (
+    <CloseConfirmDialog
+      label="this window"
+      onSave={handleSave}
+      onDontSave={handleDontSave}
+      onCancel={handleCancel}
+    />
+  )
+}
+
 function HomePage(): React.JSX.Element {
   const layout = usePanesStore((s) => s.layout)
   const updateLayout = usePanesStore((s) => s.updateLayout)
@@ -94,15 +206,19 @@ function HomePage(): React.JSX.Element {
   }
 
   return (
-    <div className="mosaic-container h-full">
-      <Mosaic<string>
-        renderTile={renderTile}
-        value={layout}
-        onChange={handleChange}
-        dragAndDropManager={dndManager}
-        className=""
-      />
-    </div>
+    <>
+      <div className="mosaic-container h-full">
+        <Mosaic<string>
+          renderTile={renderTile}
+          value={layout}
+          onChange={handleChange}
+          dragAndDropManager={dndManager}
+          className=""
+        />
+      </div>
+      <TabCloseGuard />
+      <WindowCloseGuard />
+    </>
   )
 }
 

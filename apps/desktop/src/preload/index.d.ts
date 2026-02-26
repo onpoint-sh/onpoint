@@ -15,6 +15,7 @@ import type {
   NoteSummary,
   RenameFolderResult,
   RenameNoteResult,
+  SaveNoteAsResult,
   SaveNoteResult
 } from '@onpoint/shared/notes'
 
@@ -30,7 +31,7 @@ type WindowControlsAPI = {
   getZoomFactor: () => Promise<number>
   onMaximizeChanged: (callback: (isMaximized: boolean) => void) => () => void
   onZoomFactorChanged: (callback: (zoomFactor: number) => void) => () => void
-  detachTab: (relativePath: string) => Promise<boolean>
+  detachTab: (relativePath: string, force?: boolean) => Promise<boolean>
   getDetachInit: () => Promise<{ relativePath: string } | null>
   newWindow: () => Promise<void>
   getWindowId: () => Promise<string | null>
@@ -64,6 +65,7 @@ type NotesAPI = {
   openNote: (relativePath: string) => Promise<NoteDocument>
   createNote: (input?: CreateNoteInput, parentRelativePath?: string) => Promise<NoteDocument>
   saveNote: (relativePath: string, content: string) => Promise<SaveNoteResult>
+  saveNoteAs: (content: string) => Promise<SaveNoteAsResult | null>
   renameNote: (relativePath: string, requestedTitle: string) => Promise<RenameNoteResult>
   deleteNote: (relativePath: string) => Promise<DeleteNoteResult>
   archiveNote: (relativePath: string) => Promise<ArchiveNoteResult>
@@ -72,10 +74,16 @@ type NotesAPI = {
   renameFolder: (fromPath: string, toPath: string) => Promise<RenameFolderResult>
 }
 
+type ContextMenuItem = {
+  id: string
+  label: string
+  separator?: boolean
+  accelerator?: string
+  submenu?: ContextMenuItem[]
+}
+
 type ContextMenuAPI = {
-  show: (
-    items: { id: string; label: string; separator?: boolean; accelerator?: string }[]
-  ) => Promise<string | null>
+  show: (items: ContextMenuItem[]) => Promise<string | null>
   revealInFinder: (absolutePath: string) => Promise<void>
 }
 

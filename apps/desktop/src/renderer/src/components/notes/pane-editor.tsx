@@ -5,13 +5,39 @@ import { common, createLowlight } from 'lowlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Link from '@tiptap/extension-link'
+import { InputRule } from '@tiptap/core'
 import { Markdown } from '@tiptap/markdown'
 import { marked } from 'marked'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { isUntitledPath } from '@onpoint/shared/notes'
 import { usePaneContent } from '@/hooks/use-pane-content'
+import { usePanesStore } from '@/stores/panes-store'
+import { useNotesStore } from '@/stores/notes-store'
 import { parseFrontmatter } from '@onpoint/shared/frontmatter'
+import { tabSaveCallbacks } from '@/lib/tab-save-callbacks'
 
 const lowlight = createLowlight(common)
+
+const LinkWithMarkdownShortcut = Link.extend({
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /\[([^\]]+)\]\((\S+)\)$/,
+        handler: ({ state, range, match }) => {
+          const { tr } = state
+          const [, text, url] = match
+          if (text && url) {
+            tr.replaceWith(
+              range.from,
+              range.to,
+              state.schema.text(text, [state.schema.marks.link.create({ href: url })])
+            )
+          }
+        }
+      })
+    ]
+  }
+})
 
 function getEditorMarkdown(editor: unknown): string {
   const typedEditor = editor as {
@@ -50,21 +76,108 @@ function setEditorMarkdown(editor: unknown, content: string): void {
 }
 
 type PaneEditorProps = {
+  tabId?: string
   relativePath: string | null
   focusRequestId?: number
   onFocusConsumed?: () => void
 }
 
 function PaneEditor({
+  tabId,
   relativePath,
   focusRequestId = 0,
   onFocusConsumed
 }: PaneEditorProps): React.JSX.Element {
-  const { content, setContent, isLoading, saveError } = usePaneContent(relativePath)
+  const { content, setContent, isLoading, isDirty, saveError, flushSave, getContent } = usePaneContent(relativePath)
+  const markTabDirty = usePanesStore((s) => s.markTabDirty)
+  const markTabClean = usePanesStore((s) => s.markTabClean)
 
   const isSyncingRef = useRef(false)
   const editorRef = useRef<Editor | null>(null)
   const frontmatterRef = useRef('')
+  const relativePathRef = useRef(relativePath)
+  const savingAsRef = useRef(false)
+
+  useEffect(() => {
+    relativePathRef.current = relativePath
+  }, [relativePath])
+
+  // Sync dirty state to the store so the tab bar can show indicators
+  useEffect(() => {
+    if (!tabId) return
+    if (isDirty) {
+      markTabDirty(tabId)
+    } else {
+      markTabClean(tabId)
+    }
+  }, [tabId, isDirty, markTabDirty, markTabClean])
+
+  // NOTE: We intentionally do NOT markTabClean on unmount here.
+  // The editor unmounts on tab switch (due to key prop), but the tab
+  // is still dirty. Cleanup happens in closeTab() in the store.
+
+  // Register save callback so the tab bar can trigger saves on dirty-close
+  useEffect(() => {
+    if (!tabId || !relativePath) return
+
+    const callback = async (): Promise<boolean> => {
+      if (isUntitledPath(relativePath)) {
+        const currentContent = getContent()
+        const result = await window.notes.saveNoteAs(currentContent)
+        if (!result) return false
+        usePanesStore.getState().updateTabPath(relativePath, result.relativePath)
+        void useNotesStore.getState().refreshNotesList()
+        return true
+      } else {
+        await flushSave()
+        return true
+      }
+    }
+
+    tabSaveCallbacks.set(tabId, callback)
+    return () => {
+      tabSaveCallbacks.delete(tabId)
+    }
+  }, [tabId, relativePath, getContent, flushSave])
+
+  const handleSaveAs = useCallback(async () => {
+    if (savingAsRef.current) return
+    savingAsRef.current = true
+
+    try {
+      const currentContent = getContent()
+      const result = await window.notes.saveNoteAs(currentContent)
+      if (!result) return
+
+      const oldPath = relativePathRef.current
+      if (oldPath) {
+        usePanesStore.getState().updateTabPath(oldPath, result.relativePath)
+      }
+      void useNotesStore.getState().refreshNotesList()
+    } finally {
+      savingAsRef.current = false
+    }
+  }, [getContent])
+
+  // Cmd+S / Ctrl+S handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 's' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        const path = relativePathRef.current
+        if (!path) return
+
+        if (isUntitledPath(path)) {
+          void handleSaveAs()
+        } else {
+          void flushSave()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleSaveAs, flushSave])
 
   const extensions = useMemo(
     () => [
@@ -72,7 +185,7 @@ function PaneEditor({
       CodeBlockLowlight.configure({ lowlight }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Link.configure({
+      LinkWithMarkdownShortcut.configure({
         openOnClick: false,
         autolink: true,
         linkOnPaste: true,
@@ -187,10 +300,11 @@ function PaneEditor({
     }
   }, [content, editor])
 
-  // Update editable state
+  // Update editable state — allow editing for untitled tabs too
   useEffect(() => {
     if (!editor) return
-    editor.setEditable(Boolean(relativePath && !isLoading))
+    const isUntitled = relativePath ? isUntitledPath(relativePath) : false
+    editor.setEditable(Boolean(relativePath && (isUntitled || !isLoading)))
   }, [relativePath, editor, isLoading])
 
   // Handle focus requests

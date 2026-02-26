@@ -52,7 +52,7 @@ function App(): React.JSX.Element {
         const panesState = usePanesStore.getState()
         const pane = panesState.getFocusedPane()
         if (pane?.activeTabId) {
-          panesState.closeTab(pane.id, pane.activeTabId)
+          panesState.requestCloseTab(pane.id, pane.activeTabId)
         }
         return
       }

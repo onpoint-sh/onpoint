@@ -18,6 +18,7 @@ import {
   type RenameFolderResult,
   type RenameNoteResult,
   type NoteSummary,
+  type SaveNoteAsResult,
   type SaveNoteResult
 } from '@onpoint/shared/notes'
 import { GHOST_MODE_IPC_CHANNELS, type GhostModeConfig } from '@onpoint/shared/ghost-mode'
@@ -68,8 +69,8 @@ const windowControls = {
       ipcRenderer.removeListener(IPC_CHANNELS.zoomFactorChanged, listener)
     }
   },
-  detachTab: (relativePath: string) =>
-    ipcRenderer.invoke(WINDOW_IPC_CHANNELS.detachTab, relativePath) as Promise<boolean>,
+  detachTab: (relativePath: string, force?: boolean) =>
+    ipcRenderer.invoke(WINDOW_IPC_CHANNELS.detachTab, relativePath, force) as Promise<boolean>,
   getDetachInit: () =>
     ipcRenderer.invoke(WINDOW_IPC_CHANNELS.getDetachInit) as Promise<{
       relativePath: string
@@ -133,8 +134,16 @@ const ghostMode = {
   }
 }
 
+type ContextMenuItem = {
+  id: string
+  label: string
+  separator?: boolean
+  accelerator?: string
+  submenu?: ContextMenuItem[]
+}
+
 const contextMenu = {
-  show: (items: { id: string; label: string; separator?: boolean; accelerator?: string }[]) =>
+  show: (items: ContextMenuItem[]) =>
     ipcRenderer.invoke('context-menu:show', items) as Promise<string | null>,
   revealInFinder: (absolutePath: string) =>
     ipcRenderer.invoke('context-menu:reveal-in-finder', absolutePath) as Promise<void>
@@ -152,6 +161,8 @@ const notes = {
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.create, input, parentRelativePath) as Promise<NoteDocument>,
   saveNote: (relativePath: string, content: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.save, relativePath, content) as Promise<SaveNoteResult>,
+  saveNoteAs: (content: string) =>
+    ipcRenderer.invoke(NOTES_IPC_CHANNELS.saveAs, content) as Promise<SaveNoteAsResult | null>,
   renameNote: (relativePath: string, requestedTitle: string) =>
     ipcRenderer.invoke(
       NOTES_IPC_CHANNELS.rename,

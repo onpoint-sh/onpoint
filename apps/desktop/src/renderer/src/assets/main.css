@@ -720,6 +720,30 @@
     border-bottom: 1px solid var(--border);
   }
 
+  .ghost-opacity-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--muted);
+    outline: none;
+  }
+
+  .ghost-opacity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--foreground);
+    cursor: pointer;
+    border: none;
+  }
+
+  .ghost-opacity-slider::-webkit-slider-thumb:hover {
+    background: color-mix(in oklch, var(--foreground) 80%, var(--ring));
+  }
+
   @media (max-width: 980px) {
     .settings-page {
       padding-inline: 0.95rem;
@@ -906,47 +930,37 @@ body.sidebar-resizing {
   flex-direction: column;
 }
 
-.edge-drop-zone {
+.split-drop-overlay {
   position: absolute;
+  inset: 0;
   z-index: 10;
   pointer-events: none;
 }
 
-.editor-pane-body[data-dragging='true'] .edge-drop-zone {
+.editor-pane-body[data-dragging='true'] .split-drop-overlay {
   pointer-events: auto;
 }
 
-.edge-drop-zone-left {
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 50%;
-}
-
-.edge-drop-zone-right {
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 50%;
-}
-
-.edge-drop-zone-top {
-  left: 0;
-  top: 0;
-  right: 0;
-  height: 50%;
-}
-
-.edge-drop-zone-bottom {
-  left: 0;
-  bottom: 0;
-  right: 0;
-  height: 50%;
-}
-
-.edge-drop-zone[data-over='true'] {
+.split-drop-highlight {
+  position: absolute;
   background: color-mix(in oklch, var(--primary) 15%, transparent);
   border: 2px solid var(--primary);
+}
+
+.split-drop-highlight-left {
+  left: 0; top: 0; bottom: 0; width: 50%;
+}
+
+.split-drop-highlight-right {
+  right: 0; top: 0; bottom: 0; width: 50%;
+}
+
+.split-drop-highlight-top {
+  left: 0; top: 0; right: 0; height: 50%;
+}
+
+.split-drop-highlight-bottom {
+  left: 0; bottom: 0; right: 0; height: 50%;
 }
 
 /* ── Pane Tab Bar ── */
@@ -1013,6 +1027,44 @@ body.sidebar-resizing {
   max-width: 150px;
 }
 
+/* ── Tab dirty dot indicator ── */
+
+.pane-tab-bar-tab-dirty-dot {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.pane-tab-bar-tab-dirty-dot::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pane-tab-bar-tab[data-dirty='true'] .pane-tab-bar-tab-dirty-dot {
+  display: inline-flex;
+}
+
+.pane-tab-bar-tab[data-dirty='true'] .pane-tab-bar-tab-close {
+  display: none;
+}
+
+.pane-tab-bar-tab[data-dirty='true']:hover .pane-tab-bar-tab-dirty-dot {
+  display: none;
+}
+
+.pane-tab-bar-tab[data-dirty='true']:hover .pane-tab-bar-tab-close {
+  display: inline-flex;
+  opacity: 1;
+}
+
+/* ── Tab close button ── */
+
 .pane-tab-bar-tab-close {
   display: inline-flex;
   align-items: center;
@@ -1037,6 +1089,22 @@ body.sidebar-resizing {
 .pane-tab-bar-tab-close:hover {
   background: color-mix(in oklch, var(--sidebar-foreground) 12%, transparent);
   color: var(--sidebar-foreground);
+}
+
+/* ── Pinned tabs ── */
+
+.pane-tab-bar-tab-pin {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.pane-tab-bar-tab[data-pinned='true'] .pane-tab-bar-tab-close,
+.pane-tab-bar-tab[data-pinned='true']:hover .pane-tab-bar-tab-close {
+  display: none;
+}
+
+.pane-tab-bar-tab[data-pinned='true'] .pane-tab-bar-tab-label {
+  max-width: 100px;
 }
 
 .pane-tab-bar-actions {
@@ -1066,4 +1134,78 @@ body.sidebar-resizing {
 .pane-tab-bar-action-btn:hover {
   background: color-mix(in oklch, var(--sidebar-foreground) 8%, transparent);
   color: var(--sidebar-foreground);
+}
+
+/* ── Close Confirm Dialog ── */
+
+.close-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in oklch, black 40%, transparent);
+}
+
+.close-confirm-dialog {
+  position: fixed;
+  z-index: 101;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  padding: 1.25rem;
+  box-shadow: 0 8px 32px color-mix(in oklch, black 25%, transparent);
+}
+
+.close-confirm-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 620;
+  line-height: 1.35;
+  color: var(--foreground);
+}
+
+.close-confirm-description {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.close-confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  margin-top: 1.1rem;
+}
+
+.close-confirm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 2.2rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 530;
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+
+.close-confirm-btn:hover {
+  opacity: 0.85;
+}
+
+.close-confirm-btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.close-confirm-btn-secondary {
+  background: var(--muted);
+  color: var(--foreground);
 }
