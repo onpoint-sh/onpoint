@@ -66,6 +66,7 @@ function NoteTreeNodeRenderer({
   return (
     <div
       ref={dragHandle}
+      data-node-id={node.id}
       className={`group h-full w-full cursor-pointer transition-[background-color,color] duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-foreground)_8%,var(--sidebar))] ${
         isActive
           ? 'bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))]'

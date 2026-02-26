@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tree, type TreeApi } from 'react-arborist'
 import { useDragDropManager } from 'react-dnd'
-import { FilePlus, FolderOpen, FolderPlus, Settings } from 'lucide-react'
+import { ChevronRight, FilePlus, FolderOpen, FolderPlus, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
 import { buildNotesTree, type NoteTreeNode } from '@/lib/notes-tree'
 import { NoteTreeNodeRenderer } from './note-tree-node'
-import {
-  NoteTreeContextMenu,
-  buildNoteMenuItems,
-  buildFolderMenuItems,
-  buildBackgroundMenuItems,
-  type ContextMenuPosition,
-  type ContextMenuItem
-} from './note-tree-context-menu'
 import useResizeObserver from './use-resize-observer'
 
 function NotesSidebar(): React.JSX.Element {
@@ -41,10 +33,10 @@ function NotesSidebar(): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerHeight, setContainerHeight] = useState(400)
   const [pendingFolders, setPendingFolders] = useState<Set<string>>(new Set())
-  const [contextMenu, setContextMenu] = useState<{
-    position: ContextMenuPosition
-    items: ContextMenuItem[]
-  } | null>(null)
+  const [isTreeOpen, setIsTreeOpen] = useState(true)
+  const clipboardRef = useRef<{ relativePath: string } | null>(null)
+
+  const vaultName = config.vaultPath?.split('/').pop() ?? 'Notes'
 
   useResizeObserver(containerRef, (entry) => {
     setContainerHeight(entry.contentRect.height)
@@ -178,66 +170,129 @@ function NotesSidebar(): React.JSX.Element {
   )
 
   const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.preventDefault()
       const tree = treeRef.current
       if (!tree) return
 
-      const position = { x: e.clientX, y: e.clientY }
-
-      // Find the node at the click position
+      // Identify the right-clicked node directly from the DOM
       const target = e.target as HTMLElement
-      const nodeRow = target.closest('[data-testid="row"]') ?? target.closest('[role="treeitem"]')
+      const nodeEl = target.closest<HTMLElement>('[data-node-id]')
+      const nodeId = nodeEl?.dataset.nodeId ?? null
+      const node = nodeId ? tree.get(nodeId) : null
 
-      if (nodeRow) {
-        // Get the focused/selected node
-        const focusedNode = tree.focusedNode
-        if (focusedNode) {
-          if (focusedNode.data.isNote) {
-            setContextMenu({
-              position,
-              items: buildNoteMenuItems({
-                onRename: () => focusedNode.edit(),
-                onArchive: () => void archiveNote(focusedNode.data.relativePath),
-                onDelete: () => void deleteNote(focusedNode.data.relativePath)
-              })
-            })
-          } else {
-            setContextMenu({
-              position,
-              items: buildFolderMenuItems({
-                onNewNote: () => void createNote(focusedNode.data.relativePath),
-                onNewFolder: () => {
-                  const folderPath = `${focusedNode.data.relativePath}/New Folder`
-                  void createFolder(folderPath)
-                },
-                onRename: () => focusedNode.edit(),
-                onDelete: () => {
-                  const folderPath = focusedNode.data.relativePath
-                  const folderNotes = notes.filter((n) =>
-                    n.relativePath.startsWith(folderPath + '/')
-                  )
-                  for (const note of folderNotes) {
-                    void deleteNote(note.relativePath)
-                  }
-                }
-              })
-            })
-          }
-          return
-        }
+      if (node) {
+        node.focus()
+        node.select()
       }
 
-      // Background context menu
-      setContextMenu({
-        position,
-        items: buildBackgroundMenuItems({
-          onNewNote: () => void createNote(),
-          onNewFolder: () => void createFolder('New Folder')
-        })
-      })
+      const isMac = window.windowControls.platform === 'darwin'
+      const hasCut = clipboardRef.current !== null
+
+      type Item = { id: string; label: string; separator?: boolean; accelerator?: string }
+
+      // Build menu items based on what was right-clicked
+      let items: Item[]
+
+      if (node?.data.isNote) {
+        items = [
+          { id: 'cut', label: 'Cut', accelerator: 'CmdOrCtrl+X' },
+          { id: 'copy-path', label: 'Copy Path', accelerator: 'CmdOrCtrl+C' },
+          { id: 'sep-1', label: '', separator: true },
+          { id: 'rename', label: 'Rename' },
+          { id: 'archive', label: 'Archive' },
+          { id: 'delete', label: 'Delete' },
+          { id: 'sep-2', label: '', separator: true },
+          ...(isMac
+            ? [{ id: 'reveal', label: 'Reveal in Finder' }]
+            : [{ id: 'reveal', label: 'Show in Explorer' }])
+        ]
+      } else if (node) {
+        items = [
+          { id: 'new-note', label: 'New Note' },
+          { id: 'new-folder', label: 'New Folder' },
+          ...(hasCut ? [{ id: 'paste', label: 'Paste', accelerator: 'CmdOrCtrl+V' }] : []),
+          { id: 'sep-1', label: '', separator: true },
+          { id: 'cut', label: 'Cut', accelerator: 'CmdOrCtrl+X' },
+          { id: 'copy-path', label: 'Copy Path', accelerator: 'CmdOrCtrl+C' },
+          { id: 'sep-2', label: '', separator: true },
+          { id: 'rename', label: 'Rename' },
+          { id: 'delete', label: 'Delete' },
+          { id: 'sep-3', label: '', separator: true },
+          ...(isMac
+            ? [{ id: 'reveal', label: 'Reveal in Finder' }]
+            : [{ id: 'reveal', label: 'Show in Explorer' }])
+        ]
+      } else {
+        items = [
+          { id: 'new-note', label: 'New Note' },
+          { id: 'new-folder', label: 'New Folder' },
+          ...(hasCut ? [{ id: 'paste', label: 'Paste', accelerator: 'CmdOrCtrl+V' }] : [])
+        ]
+      }
+
+      const clickedId = await window.contextMenu.show(items)
+      if (!clickedId) return
+
+      switch (clickedId) {
+        case 'rename':
+          node?.edit()
+          break
+        case 'archive':
+          if (node) void archiveNote(node.data.relativePath)
+          break
+        case 'delete':
+          if (node?.data.isNote) {
+            void deleteNote(node.data.relativePath)
+          } else if (node) {
+            const folderPath = node.data.relativePath
+            for (const n of notes.filter((n) => n.relativePath.startsWith(folderPath + '/'))) {
+              void deleteNote(n.relativePath)
+            }
+          }
+          break
+        case 'new-note':
+          void createNote(node?.data.relativePath)
+          break
+        case 'new-folder':
+          if (node) {
+            void createFolder(`${node.data.relativePath}/New Folder`)
+          } else {
+            void createFolder('New Folder')
+          }
+          break
+        case 'cut':
+          if (node) {
+            clipboardRef.current = { relativePath: node.data.relativePath }
+          }
+          break
+        case 'copy-path':
+          if (node) {
+            void navigator.clipboard.writeText(node.data.relativePath)
+          }
+          break
+        case 'paste': {
+          const clip = clipboardRef.current
+          if (!clip) break
+          const fileName = clip.relativePath.split('/').pop()
+          if (!fileName) break
+          const targetFolder = node ? node.data.relativePath : ''
+          const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName
+          if (newPath !== clip.relativePath) {
+            void moveNote(clip.relativePath, newPath)
+          }
+          clipboardRef.current = null
+          break
+        }
+        case 'reveal':
+          if (node && config.vaultPath) {
+            const absolutePath = `${config.vaultPath}/${node.data.relativePath}`
+            void window.contextMenu.revealInFinder(absolutePath)
+          }
+          break
+      }
     },
-    [notes, createNote, createFolder, deleteNote, archiveNote]
+    [notes, config.vaultPath, createNote, createFolder, deleteNote, archiveNote, moveNote]
   )
 
   return (
@@ -259,85 +314,93 @@ function NotesSidebar(): React.JSX.Element {
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-1">
+          <div className="group -mx-3 flex items-center gap-0.5 px-3">
             <button
               type="button"
-              className="inline-flex size-7 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
-              title="New Note"
-              onClick={() => {
-                if (treeRef.current) {
-                  void treeRef.current.createLeaf()
-                } else {
-                  void createNote()
-                }
-              }}
+              className="flex min-w-0 flex-1 items-center gap-1 rounded-[calc(var(--radius)-2px)] py-0.5 text-[0.75rem] font-semibold uppercase tracking-wide text-sidebar-foreground/70 transition-colors duration-[120ms] hover:text-sidebar-foreground"
+              onClick={() => setIsTreeOpen((prev) => !prev)}
             >
-              <FilePlus className="size-4" />
+              <ChevronRight
+                className={`size-3.5 shrink-0 transition-transform duration-150 ${isTreeOpen ? 'rotate-90' : ''}`}
+              />
+              <span className="truncate">{vaultName}</span>
             </button>
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
-              title="New Folder"
-              onClick={() => {
-                if (treeRef.current) {
-                  void treeRef.current.createInternal()
-                } else {
-                  void createFolder('New Folder')
-                }
-              }}
-            >
-              <FolderPlus className="size-4" />
-            </button>
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
-              title="Open Folder"
-              onClick={() => void pickVault()}
-            >
-              <FolderOpen className="size-4" />
-            </button>
+            <div className="flex items-center gap-0.5 opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100">
+              <button
+                type="button"
+                className="inline-flex size-6 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
+                title="New Note"
+                onClick={() => {
+                  if (treeRef.current) {
+                    void treeRef.current.createLeaf()
+                  } else {
+                    void createNote()
+                  }
+                }}
+              >
+                <FilePlus className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex size-6 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
+                title="New Folder"
+                onClick={() => {
+                  if (treeRef.current) {
+                    void treeRef.current.createInternal()
+                  } else {
+                    void createFolder('New Folder')
+                  }
+                }}
+              >
+                <FolderPlus className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex size-6 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
+                title="Open Folder"
+                onClick={() => void pickVault()}
+              >
+                <FolderOpen className="size-3.5" />
+              </button>
+            </div>
           </div>
 
-          {notes.length === 0 && pendingFolders.size === 0 ? (
-            <p className="m-0 text-[0.76rem] leading-[1.35] text-muted-foreground">
-              No markdown files found yet. Create your first note.
-            </p>
-          ) : (
-            <div
-              ref={containerRef}
-              className="-mx-3 min-h-0 flex-1"
-              onContextMenu={handleContextMenu}
-            >
-              <Tree<NoteTreeNode>
-                ref={treeRef}
-                data={treeData}
-                width="100%"
-                height={containerHeight}
-                rowHeight={28}
-                indent={20}
-                openByDefault={false}
-                selection={activeRelativePath ?? undefined}
-                disableMultiSelection
-                dndManager={dndManager}
-                onCreate={handleCreate}
-                onRename={handleRename}
-                onDelete={handleDelete}
-                onMove={handleMove}
-              >
-                {NoteTreeNodeRenderer}
-              </Tree>
-            </div>
+          {isTreeOpen && (
+            <>
+              {notes.length === 0 && pendingFolders.size === 0 ? (
+                <p className="m-0 text-[0.76rem] leading-[1.35] text-muted-foreground">
+                  No markdown files found yet. Create your first note.
+                </p>
+              ) : (
+                <div
+                  ref={containerRef}
+                  className="-mx-3 min-h-0 flex-1"
+                  onContextMenu={handleContextMenu}
+                >
+                  <Tree<NoteTreeNode>
+                    ref={treeRef}
+                    data={treeData}
+                    width="100%"
+                    height={containerHeight}
+                    rowHeight={28}
+                    indent={20}
+                    openByDefault={false}
+                    selection={activeRelativePath ?? undefined}
+                    disableMultiSelection
+                    dndManager={dndManager}
+                    onCreate={handleCreate}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
+                    onMove={handleMove}
+                  >
+                    {NoteTreeNodeRenderer}
+                  </Tree>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
-
-      {contextMenu ? (
-        <NoteTreeContextMenu
-          position={contextMenu.position}
-          items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
-        />
-      ) : null}
 
       <div className="mt-auto flex pt-2">
         <button

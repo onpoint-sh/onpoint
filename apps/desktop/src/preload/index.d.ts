@@ -72,6 +72,13 @@ type NotesAPI = {
   renameFolder: (fromPath: string, toPath: string) => Promise<RenameFolderResult>
 }
 
+type ContextMenuAPI = {
+  show: (
+    items: { id: string; label: string; separator?: boolean; accelerator?: string }[]
+  ) => Promise<string | null>
+  revealInFinder: (absolutePath: string) => Promise<void>
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -79,5 +86,6 @@ declare global {
     shortcuts: ShortcutsAPI
     notes: NotesAPI
     ghostMode: GhostModeAPI
+    contextMenu: ContextMenuAPI
   }
 }

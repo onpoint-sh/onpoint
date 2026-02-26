@@ -133,6 +133,13 @@ const ghostMode = {
   }
 }
 
+const contextMenu = {
+  show: (items: { id: string; label: string; separator?: boolean; accelerator?: string }[]) =>
+    ipcRenderer.invoke('context-menu:show', items) as Promise<string | null>,
+  revealInFinder: (absolutePath: string) =>
+    ipcRenderer.invoke('context-menu:reveal-in-finder', absolutePath) as Promise<void>
+}
+
 const notes = {
   getConfig: () => ipcRenderer.invoke(NOTES_IPC_CHANNELS.getConfig) as Promise<NotesConfig>,
   pickVault: () => ipcRenderer.invoke(NOTES_IPC_CHANNELS.pickVault) as Promise<string | null>,
@@ -173,6 +180,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('shortcuts', shortcuts)
     contextBridge.exposeInMainWorld('notes', notes)
     contextBridge.exposeInMainWorld('ghostMode', ghostMode)
+    contextBridge.exposeInMainWorld('contextMenu', contextMenu)
   } catch (error) {
     console.error(error)
   }
@@ -187,4 +195,6 @@ if (process.contextIsolated) {
   window.notes = notes
   // @ts-ignore (define in dts)
   window.ghostMode = ghostMode
+  // @ts-ignore (define in dts)
+  window.contextMenu = contextMenu
 }

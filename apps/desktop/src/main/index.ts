@@ -14,6 +14,7 @@ import {
 } from './window/window-state'
 import { windowRegistry, createWindowId } from './window/window-registry'
 import { registerWindowControls } from './window/register-window-controls'
+import { registerContextMenu } from './window/context-menu'
 import { setupApplicationMenu } from './menu'
 import { createShortcutService } from './shortcuts'
 import { registerNotesIpc } from './notes/ipc'
@@ -71,6 +72,7 @@ app.whenReady().then(() => {
 
   setupApplicationMenu({ onNewWindow: createNewWindow })
   registerWindowControls()
+  registerContextMenu()
 
   // Handle new window IPC from renderer
   ipcMain.handle(WINDOW_IPC_CHANNELS.newWindow, () => {
