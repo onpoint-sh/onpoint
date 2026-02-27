@@ -16,7 +16,8 @@ import type {
   RenameFolderResult,
   RenameNoteResult,
   SaveNoteAsResult,
-  SaveNoteResult
+  SaveNoteResult,
+  SearchContentMatch
 } from '@onpoint/shared/notes'
 
 type WindowControlsAPI = {
@@ -25,11 +26,13 @@ type WindowControlsAPI = {
   toggleMaximize: () => Promise<boolean>
   close: () => Promise<void>
   isMaximized: () => Promise<boolean>
+  isFullScreen: () => Promise<boolean>
   zoomIn: () => Promise<void>
   zoomOut: () => Promise<void>
   resetZoom: () => Promise<void>
   getZoomFactor: () => Promise<number>
   onMaximizeChanged: (callback: (isMaximized: boolean) => void) => () => void
+  onFullScreenChanged: (callback: (isFullScreen: boolean) => void) => () => void
   onZoomFactorChanged: (callback: (zoomFactor: number) => void) => () => void
   detachTab: (relativePath: string, force?: boolean) => Promise<boolean>
   getDetachInit: () => Promise<{ relativePath: string } | null>
@@ -72,6 +75,7 @@ type NotesAPI = {
   moveNote: (fromPath: string, toPath: string) => Promise<MoveNoteResult>
   createFolder: (relativePath: string) => Promise<CreateFolderResult>
   renameFolder: (fromPath: string, toPath: string) => Promise<RenameFolderResult>
+  searchContent: (query: string) => Promise<SearchContentMatch[]>
 }
 
 type ContextMenuItem = {

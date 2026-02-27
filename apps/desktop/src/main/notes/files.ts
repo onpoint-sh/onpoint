@@ -20,14 +20,25 @@ import type {
   NoteSummary,
   RenameFolderResult,
   RenameNoteResult,
-  SaveNoteResult
+  SaveNoteResult,
+  SearchContentMatch
 } from '@onpoint/shared/notes'
 import {
   buildNoteContent,
+  extractBody,
   extractTitle,
   migrateFromHeading,
   replaceFrontmatterTitle
 } from '@onpoint/shared/frontmatter'
+
+type BodyCacheEntry = {
+  body: string
+  title: string
+  mtimeMs: number
+}
+
+// Per-vault body cache: keyed by resolved vault path → (relativePath → entry)
+const vaultBodyCaches = new Map<string, Map<string, BodyCacheEntry>>()
 
 function toPosixPath(value: string): string {
   return value.replace(/\\/g, '/')
@@ -169,7 +180,18 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
       fs.readFile(absolutePath, 'utf-8'),
       fs.stat(absolutePath)
     ])
-    files.push(toNoteSummary(vaultPath, absolutePath, content, fileStats.mtimeMs, fileStats.size))
+    const summary = toNoteSummary(vaultPath, absolutePath, content, fileStats.mtimeMs, fileStats.size)
+    files.push(summary)
+
+    // Populate body cache (piggyback on existing I/O)
+    const vaultCache = vaultBodyCaches.get(vaultPath)
+    if (vaultCache) {
+      vaultCache.set(summary.relativePath, {
+        body: extractBody(content),
+        title: summary.title,
+        mtimeMs: summary.mtimeMs
+      })
+    }
   }
 
   return files
@@ -177,6 +199,10 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
 
 export async function listVaultNotes(vaultPath: string): Promise<NoteSummary[]> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
+
+  // Reset body cache before full walk — ensures a complete snapshot
+  vaultBodyCaches.set(resolvedVaultPath, new Map())
+
   const notes = await walkMarkdownFiles(resolvedVaultPath, resolvedVaultPath)
 
   notes.sort((left, right) => {
@@ -404,6 +430,61 @@ export async function createVaultFolder(
 
   await fs.mkdir(absolutePath, { recursive: true })
   return { relativePath: toPosixPath(relative(resolvedVaultPath, absolutePath)) }
+}
+
+function buildSnippet(body: string, index: number, queryLength: number): string {
+  const snippetStart = Math.max(0, index - 40)
+  const snippetEnd = Math.min(body.length, index + queryLength + 80)
+  let snippet = body.slice(snippetStart, snippetEnd).replace(/\n+/g, ' ').trim()
+  if (snippetStart > 0) snippet = '...' + snippet
+  if (snippetEnd < body.length) snippet = snippet + '...'
+  return snippet
+}
+
+export async function searchVaultContent(
+  vaultPath: string,
+  query: string,
+  maxResults = 20
+): Promise<SearchContentMatch[]> {
+  const resolvedVaultPath = await ensureVaultPath(vaultPath)
+  const lowerQuery = query.toLowerCase()
+  const matches: SearchContentMatch[] = []
+
+  // Fast path: use in-memory cache populated by listVaultNotes
+  const vaultCache = vaultBodyCaches.get(resolvedVaultPath)
+  if (vaultCache && vaultCache.size > 0) {
+    for (const [relativePath, entry] of vaultCache) {
+      if (matches.length >= maxResults) break
+      const index = entry.body.toLowerCase().indexOf(lowerQuery)
+      if (index === -1) continue
+      matches.push({
+        relativePath,
+        title: entry.title,
+        snippet: buildSnippet(entry.body, index, query.length),
+        mtimeMs: entry.mtimeMs
+      })
+    }
+    return matches
+  }
+
+  // Fallback: read from disk (only before first listVaultNotes completes)
+  const notes = await walkMarkdownFiles(resolvedVaultPath, resolvedVaultPath)
+  for (const note of notes) {
+    if (matches.length >= maxResults) break
+    const absolutePath = resolve(resolvedVaultPath, note.relativePath)
+    const raw = await fs.readFile(absolutePath, 'utf-8')
+    const body = extractBody(raw)
+    const index = body.toLowerCase().indexOf(lowerQuery)
+    if (index === -1) continue
+    matches.push({
+      relativePath: note.relativePath,
+      title: note.title,
+      snippet: buildSnippet(body, index, query.length),
+      mtimeMs: note.mtimeMs
+    })
+  }
+
+  return matches
 }
 
 export async function renameVaultFolder(

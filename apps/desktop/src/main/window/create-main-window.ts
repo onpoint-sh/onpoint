@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import icon from '../../../resources/icon.png?asset'
 import {
   WINDOW_CONTROL_MAXIMIZE_CHANGED_CHANNEL,
+  WINDOW_CONTROL_FULLSCREEN_CHANGED_CHANNEL,
   WINDOW_CONTROL_ZOOM_FACTOR_CHANGED_CHANNEL
 } from './register-window-controls'
 import type { DetachedInitData } from '@onpoint/shared/window'
@@ -79,6 +80,18 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
 
   mainWindow.on('unmaximize', () => {
     emitMaximizeState(mainWindow)
+  })
+
+  mainWindow.on('enter-full-screen', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(WINDOW_CONTROL_FULLSCREEN_CHANGED_CHANNEL, true)
+    }
+  })
+
+  mainWindow.on('leave-full-screen', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(WINDOW_CONTROL_FULLSCREEN_CHANGED_CHANNEL, false)
+    }
   })
 
   mainWindow.webContents.on('did-finish-load', () => {

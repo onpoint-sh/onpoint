@@ -17,6 +17,7 @@ export type ShortcutActionId =
   | 'show_main_window'
   | 'toggle_ghost_mode'
   | 'new_window'
+  | 'search'
 
 export type ShortcutDefinition = {
   id: ShortcutActionId
@@ -164,6 +165,14 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     scope: 'window',
     defaultAccelerator: 'CommandOrControl+Shift+N',
     allowInEditable: true
+  },
+  {
+    id: 'search',
+    label: 'Search',
+    description: 'Open the search palette to find notes by title or content.',
+    scope: 'window',
+    defaultAccelerator: 'CommandOrControl+K',
+    allowInEditable: true
   }
 ] as const
 
@@ -216,7 +225,8 @@ export function getDefaultShortcutBindings(): ShortcutBindings {
       zoom_reset: 'CommandOrControl+0',
       show_main_window: 'CommandOrControl+Shift+Space',
       toggle_ghost_mode: 'CommandOrControl+Shift+G',
-      new_window: 'CommandOrControl+Shift+N'
+      new_window: 'CommandOrControl+Shift+N',
+      search: 'CommandOrControl+K'
     }
   )
 }

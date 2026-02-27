@@ -10,6 +10,25 @@ function WindowControls({ align }: WindowControlsProps): React.JSX.Element | nul
   const shouldRenderMacSpacer = isMac && align === 'left'
   const shouldRenderDesktopButtons = !isMac && align === 'right'
   const [isMaximized, setIsMaximized] = useState(false)
+  const [isFullScreen, setIsFullScreen] = useState(false)
+
+  useEffect(() => {
+    if (!shouldRenderMacSpacer) return
+
+    let isMounted = true
+    const unsubscribe = window.windowControls.onFullScreenChanged((next) => {
+      if (isMounted) setIsFullScreen(next)
+    })
+
+    void window.windowControls.isFullScreen().then((next) => {
+      if (isMounted) setIsFullScreen(next)
+    })
+
+    return () => {
+      isMounted = false
+      unsubscribe()
+    }
+  }, [shouldRenderMacSpacer])
 
   useEffect(() => {
     if (!shouldRenderDesktopButtons) return
@@ -30,6 +49,7 @@ function WindowControls({ align }: WindowControlsProps): React.JSX.Element | nul
   }, [shouldRenderDesktopButtons])
 
   if (shouldRenderMacSpacer) {
+    if (isFullScreen) return null
     return <div className="h-6 w-[72px] shrink-0" aria-hidden />
   }
 

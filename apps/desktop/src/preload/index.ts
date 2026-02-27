@@ -19,7 +19,8 @@ import {
   type RenameNoteResult,
   type NoteSummary,
   type SaveNoteAsResult,
-  type SaveNoteResult
+  type SaveNoteResult,
+  type SearchContentMatch
 } from '@onpoint/shared/notes'
 import { GHOST_MODE_IPC_CHANNELS, type GhostModeConfig } from '@onpoint/shared/ghost-mode'
 import { WINDOW_IPC_CHANNELS } from '@onpoint/shared/window'
@@ -34,6 +35,7 @@ const IPC_CHANNELS = {
   resetZoom: 'window-controls:reset-zoom',
   getZoomFactor: 'window-controls:get-zoom-factor',
   maximizeChanged: 'window-controls:maximize-changed',
+  fullScreenChanged: 'window-controls:full-screen-changed',
   zoomFactorChanged: 'window-controls:zoom-factor-changed'
 } as const
 
@@ -43,6 +45,7 @@ const windowControls = {
   toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.toggleMaximize) as Promise<boolean>,
   close: () => ipcRenderer.invoke(IPC_CHANNELS.close),
   isMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.isMaximized) as Promise<boolean>,
+  isFullScreen: () => ipcRenderer.invoke('window-controls:is-full-screen') as Promise<boolean>,
   zoomIn: () => ipcRenderer.invoke(IPC_CHANNELS.zoomIn),
   zoomOut: () => ipcRenderer.invoke(IPC_CHANNELS.zoomOut),
   resetZoom: () => ipcRenderer.invoke(IPC_CHANNELS.resetZoom),
@@ -56,6 +59,17 @@ const windowControls = {
 
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.maximizeChanged, listener)
+    }
+  },
+  onFullScreenChanged: (callback: (isFullScreen: boolean) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, isFullScreen: boolean): void => {
+      callback(isFullScreen)
+    }
+
+    ipcRenderer.on(IPC_CHANNELS.fullScreenChanged, listener)
+
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.fullScreenChanged, listener)
     }
   },
   onZoomFactorChanged: (callback: (zoomFactor: number) => void): (() => void) => {
@@ -178,7 +192,9 @@ const notes = {
   createFolder: (relativePath: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.createFolder, relativePath) as Promise<CreateFolderResult>,
   renameFolder: (fromPath: string, toPath: string) =>
-    ipcRenderer.invoke(NOTES_IPC_CHANNELS.renameFolder, fromPath, toPath) as Promise<RenameFolderResult>
+    ipcRenderer.invoke(NOTES_IPC_CHANNELS.renameFolder, fromPath, toPath) as Promise<RenameFolderResult>,
+  searchContent: (query: string) =>
+    ipcRenderer.invoke(NOTES_IPC_CHANNELS.searchContent, query) as Promise<SearchContentMatch[]>
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

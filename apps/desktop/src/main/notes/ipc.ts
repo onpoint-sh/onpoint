@@ -31,7 +31,8 @@ import {
   openVaultNote,
   renameVaultFolder,
   renameVaultNote,
-  saveVaultNote
+  saveVaultNote,
+  searchVaultContent
 } from './files'
 import { loadNotesConfig, saveNotesConfig } from './store'
 import { windowRegistry } from '../window/window-registry'
@@ -51,6 +52,7 @@ function removeNotesHandlers(): void {
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.move)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.createFolder)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.renameFolder)
+  ipcMain.removeHandler(NOTES_IPC_CHANNELS.searchContent)
 }
 
 function getWindowFromEvent(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -401,6 +403,11 @@ export function registerNotesIpc(): () => void {
       return renameFolder(resolveWindowId(event), fromRelativePath, toRelativePath)
     }
   )
+
+  ipcMain.handle(NOTES_IPC_CHANNELS.searchContent, async (event, query: string) => {
+    const vaultPath = await ensureConfiguredVaultPath(resolveWindowId(event))
+    return searchVaultContent(vaultPath, query)
+  })
 
   return () => {
     removeNotesHandlers()

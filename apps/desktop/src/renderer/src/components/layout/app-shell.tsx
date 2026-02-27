@@ -9,10 +9,11 @@ import { useNotesStore } from '@/stores/notes-store'
 type AppShellProps = {
   children: React.ReactNode
   sidebarContent?: React.ReactNode
+  onOpenSearch?: () => void
   isGhostMode?: boolean
 }
 
-function AppShell({ children, sidebarContent, isGhostMode = false }: AppShellProps): React.JSX.Element {
+function AppShell({ children, sidebarContent, onOpenSearch, isGhostMode = false }: AppShellProps): React.JSX.Element {
   useTheme()
   useTitlebarZoomCompensation()
 
@@ -33,6 +34,7 @@ function AppShell({ children, sidebarContent, isGhostMode = false }: AppShellPro
         onToggleSidebar={hasSidebar ? toggleSidebar : undefined}
         canCreateNote={hasSidebar && canCreateNote}
         onCreateNote={hasSidebar ? () => void createNote() : undefined}
+        onOpenSearch={onOpenSearch}
         isGhostMode={isGhostMode}
       />
       {hasSidebar ? (

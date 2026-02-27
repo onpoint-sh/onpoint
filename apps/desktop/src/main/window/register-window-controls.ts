@@ -5,6 +5,7 @@ const INVOKE_CHANNELS = {
   toggleMaximize: 'window-controls:toggle-maximize',
   close: 'window-controls:close',
   isMaximized: 'window-controls:is-maximized',
+  isFullScreen: 'window-controls:is-full-screen',
   zoomIn: 'window-controls:zoom-in',
   zoomOut: 'window-controls:zoom-out',
   resetZoom: 'window-controls:reset-zoom',
@@ -12,6 +13,7 @@ const INVOKE_CHANNELS = {
 } as const
 
 export const WINDOW_CONTROL_MAXIMIZE_CHANGED_CHANNEL = 'window-controls:maximize-changed'
+export const WINDOW_CONTROL_FULLSCREEN_CHANGED_CHANNEL = 'window-controls:full-screen-changed'
 export const WINDOW_CONTROL_ZOOM_FACTOR_CHANGED_CHANNEL = 'window-controls:zoom-factor-changed'
 const WINDOW_ZOOM_STEP = 0.5
 const WINDOW_ZOOM_MIN_LEVEL = -5
@@ -40,6 +42,7 @@ export function registerWindowControls(): void {
   ipcMain.removeHandler(INVOKE_CHANNELS.toggleMaximize)
   ipcMain.removeHandler(INVOKE_CHANNELS.close)
   ipcMain.removeHandler(INVOKE_CHANNELS.isMaximized)
+  ipcMain.removeHandler(INVOKE_CHANNELS.isFullScreen)
   ipcMain.removeHandler(INVOKE_CHANNELS.zoomIn)
   ipcMain.removeHandler(INVOKE_CHANNELS.zoomOut)
   ipcMain.removeHandler(INVOKE_CHANNELS.resetZoom)
@@ -74,6 +77,12 @@ export function registerWindowControls(): void {
     const window = getWindowFromEvent(event)
     if (!window || window.isDestroyed()) return false
     return window.isMaximized()
+  })
+
+  ipcMain.handle(INVOKE_CHANNELS.isFullScreen, (event) => {
+    const window = getWindowFromEvent(event)
+    if (!window || window.isDestroyed()) return false
+    return window.isFullScreen()
   })
 
   ipcMain.handle(INVOKE_CHANNELS.zoomIn, (event) => {

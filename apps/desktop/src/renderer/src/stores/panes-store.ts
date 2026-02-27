@@ -60,7 +60,7 @@ export type PanesStoreState = {
   ) => void
 
   // Tab operations
-  openTab: (relativePath: string, paneId?: string) => string
+  openTab: (relativePath: string, paneId?: string, options?: { focus?: boolean }) => string
   openUntitledTab: (paneId?: string) => string
   closeTab: (paneId: string, tabId: string) => void
   closeOtherTabs: (paneId: string, tabId: string) => void
@@ -342,7 +342,8 @@ export const usePanesStore = create<PanesStoreState>()(
         set({ layout })
       },
 
-      openTab: (relativePath: string, paneId?: string) => {
+      openTab: (relativePath: string, paneId?: string, options?: { focus?: boolean }) => {
+        const shouldFocus = options?.focus ?? true
         const state = get()
         const targetPaneId = paneId ?? state.focusedPaneId
 
@@ -379,10 +380,14 @@ export const usePanesStore = create<PanesStoreState>()(
             }
           },
           focusedPaneId: targetPaneId,
-          focusRequestsByPane: {
-            ...state.focusRequestsByPane,
-            [targetPaneId]: createFocusRequestId()
-          }
+          ...(shouldFocus
+            ? {
+                focusRequestsByPane: {
+                  ...state.focusRequestsByPane,
+                  [targetPaneId]: createFocusRequestId()
+                }
+              }
+            : {})
         })
 
         return targetPaneId

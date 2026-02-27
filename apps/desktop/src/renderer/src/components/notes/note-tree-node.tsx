@@ -6,6 +6,11 @@ import { usePanesStore } from '@/stores/panes-store'
 
 const BASE_PADDING_LEFT = 12
 
+const justCreatedIds = new Set<string>()
+export function markAsJustCreated(id: string): void {
+  justCreatedIds.add(id)
+}
+
 function NoteTreeNodeRenderer({
   node,
   style,
@@ -19,7 +24,8 @@ function NoteTreeNodeRenderer({
   const activeTab = focusedPane?.tabs.find((t) => t.id === focusedPane.activeTabId)
   const isActive = node.data.isNote && node.data.relativePath === activeTab?.relativePath
 
-  const [editValue, setEditValue] = useState(node.data.name)
+  const isNewNode = justCreatedIds.has(node.id)
+  const [editValue, setEditValue] = useState(isNewNode ? '' : node.data.name)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const contentStyle = useMemo(
@@ -31,7 +37,7 @@ function NoteTreeNodeRenderer({
 
   function handleClick(e: React.MouseEvent): void {
     if (node.data.isNote) {
-      openTab(node.data.relativePath)
+      openTab(node.data.relativePath, undefined, { focus: false })
     } else {
       node.toggle()
     }
@@ -42,21 +48,39 @@ function NoteTreeNodeRenderer({
     return (
       <div className="flex h-full w-full items-center">
         <div className="flex flex-1 items-center gap-[5px] pr-2" style={contentStyle}>
-          <span className="inline-flex w-4 shrink-0" />
+          {node.isLeaf ? (
+            <>
+              <span className="inline-flex w-4 shrink-0" />
+              <FileText className="size-[14px] shrink-0 text-muted-foreground" />
+            </>
+          ) : (
+            <>
+              <span className="inline-flex w-4 shrink-0 items-center justify-center">
+                <ChevronRight className="size-3.5 text-muted-foreground" />
+              </span>
+              <Folder className="size-[14px] shrink-0 text-muted-foreground" />
+            </>
+          )}
           <input
             ref={inputRef}
             autoFocus
             className="h-[22px] flex-1 rounded-[3px] border border-sidebar-ring bg-sidebar px-1.5 text-[0.8rem] text-sidebar-foreground outline-none"
+
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
+                justCreatedIds.delete(node.id)
                 node.submit(editValue)
               } else if (e.key === 'Escape') {
+                justCreatedIds.delete(node.id)
                 node.reset()
               }
             }}
-            onBlur={() => node.submit(editValue)}
+            onBlur={() => {
+              justCreatedIds.delete(node.id)
+              node.submit(editValue)
+            }}
           />
         </div>
       </div>
@@ -67,11 +91,11 @@ function NoteTreeNodeRenderer({
     <div
       ref={dragHandle}
       data-node-id={node.id}
-      className={`group h-full w-full cursor-pointer transition-[background-color,color] duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-foreground)_8%,var(--sidebar))] ${
+      className={`group h-full w-full cursor-pointer transition-[background-color,color] duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] ${
         isActive
-          ? 'bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))]'
+          ? 'bg-[color-mix(in_oklch,var(--sidebar-accent)_60%,transparent)]'
           : ''
-      } ${node.isSelected && !isActive ? 'bg-[color-mix(in_oklch,var(--sidebar-foreground)_4%,var(--sidebar))]' : ''}`}
+      } ${node.isSelected && !isActive ? 'bg-[color-mix(in_oklch,var(--sidebar-accent)_50%,transparent)]' : ''}`}
       onClick={handleClick}
       onDoubleClick={() => {
         if (node.data.isNote) {

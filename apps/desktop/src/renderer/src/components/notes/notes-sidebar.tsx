@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Tree, type TreeApi } from 'react-arborist'
+import { Tree, type NodeApi, type TreeApi } from 'react-arborist'
 import { useDragDropManager } from 'react-dnd'
 import {
   ChevronRight,
@@ -13,19 +13,23 @@ import { useNavigate } from 'react-router-dom'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
 import { buildNotesTree, type NoteTreeNode } from '@/lib/notes-tree'
-import { NoteTreeNodeRenderer } from './note-tree-node'
+import { NoteTreeNodeRenderer, markAsJustCreated } from './note-tree-node'
 import useResizeObserver from './use-resize-observer'
+
+const TREE_ROW_HEIGHT = 28
+
+type StickyFolderRow = {
+  id: string
+  name: string
+  relativePath: string
+  level: number
+}
 
 function NotesSidebar(): React.JSX.Element {
   const navigate = useNavigate()
   const dndManager = useDragDropManager()
   const config = useNotesStore((s) => s.config)
   const notes = useNotesStore((s) => s.notes)
-  const focusedPane = usePanesStore((s) => {
-    if (!s.focusedPaneId) return null
-    return s.panes[s.focusedPaneId] ?? null
-  })
-  const activeRelativePath = focusedPane?.tabs.find((t) => t.id === focusedPane.activeTabId)?.relativePath ?? null
   const error = useNotesStore((s) => s.error)
   const pickVault = useNotesStore((s) => s.pickVault)
   const createNote = useNotesStore((s) => s.createNote)
@@ -41,7 +45,9 @@ function NotesSidebar(): React.JSX.Element {
   const [containerHeight, setContainerHeight] = useState(400)
   const [pendingFolders, setPendingFolders] = useState<Set<string>>(new Set())
   const [isTreeOpen, setIsTreeOpen] = useState(true)
-  const clipboardRef = useRef<{ relativePath: string } | null>(null)
+  const [stickyFolderRows, setStickyFolderRows] = useState<StickyFolderRow[]>([])
+  const clipboardRef = useRef<{ relativePaths: string[] } | null>(null)
+  const scrollOffsetRef = useRef(0)
 
   const vaultName = config.vaultPath?.split('/').pop() ?? 'Notes'
 
@@ -65,6 +71,71 @@ function NotesSidebar(): React.JSX.Element {
     () => buildNotesTree(notes, [...pendingFolders]),
     [notes, pendingFolders]
   )
+
+  const getFolderNodeFromTopNode = useCallback((node: NodeApi<NoteTreeNode> | null): NodeApi<NoteTreeNode> | null => {
+    if (!node) return null
+    if (!node.data.isNote) return node
+    const parent = node.parent
+    if (!parent || parent.isRoot || parent.data.isNote) return null
+    return parent
+  }, [])
+
+  const refreshStickyFolderRows = useCallback(
+    (scrollOffset: number) => {
+      const tree = treeRef.current
+      if (!tree) return
+      const topIndex = Math.max(0, Math.floor(scrollOffset / TREE_ROW_HEIGHT))
+      const topNode = tree.at(topIndex) ?? tree.firstNode
+      const folderNode = getFolderNodeFromTopNode(topNode)
+      if (!folderNode) {
+        setStickyFolderRows((prev) => (prev.length === 0 ? prev : []))
+        return
+      }
+
+      const chain: NodeApi<NoteTreeNode>[] = []
+      let current: NodeApi<NoteTreeNode> | null = folderNode
+      while (current && !current.isRoot && !current.data.isNote) {
+        chain.unshift(current)
+        current = current.parent
+      }
+
+      const nextRows: StickyFolderRow[] = []
+      for (const [chainIndex, item] of chain.entries()) {
+        const rowIndex = tree.indexOf(item.id)
+        if (rowIndex === null || rowIndex === undefined) continue
+
+        const rowTop = rowIndex * TREE_ROW_HEIGHT - scrollOffset
+        const stickyTop = chainIndex * TREE_ROW_HEIGHT
+        if (rowTop < stickyTop) {
+          nextRows.push({
+            id: item.id,
+            name: item.data.name,
+            relativePath: item.data.relativePath,
+            level: item.level
+          })
+        }
+      }
+
+      setStickyFolderRows((prev) => {
+        if (
+          prev.length === nextRows.length &&
+          prev.every((row, i) => row.id === nextRows[i]?.id)
+        ) {
+          return prev
+        }
+        return nextRows
+      })
+    },
+    [getFolderNodeFromTopNode]
+  )
+
+  useEffect(() => {
+    if (!isTreeOpen) return
+    const frame = requestAnimationFrame(() => {
+      refreshStickyFolderRows(scrollOffsetRef.current)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [isTreeOpen, treeData, refreshStickyFolderRows])
 
   const handleCreate = useCallback(
     async ({
@@ -98,14 +169,18 @@ function NotesSidebar(): React.JSX.Element {
         const folderPath = parentPath ? `${parentPath}/${folderName}` : folderName
         await window.notes.createFolder(folderPath)
         setPendingFolders((prev) => new Set([...prev, folderPath]))
-        return { id: `folder:${folderPath}` }
+        const folderId = `folder:${folderPath}`
+        markAsJustCreated(folderId)
+        return { id: folderId }
       }
 
-      const notePath = await createNote(parentPath)
-      if (!notePath) return null
-      return { id: notePath }
+      const note = await window.notes.createNote(undefined, parentPath)
+      const updatedNotes = await window.notes.listNotes()
+      useNotesStore.setState({ notes: updatedNotes })
+      markAsJustCreated(note.relativePath)
+      return { id: note.relativePath }
     },
-    [createNote, treeData, pendingFolders]
+    [treeData, pendingFolders]
   )
 
   const handleRename = useCallback(
@@ -127,6 +202,8 @@ function NotesSidebar(): React.JSX.Element {
           return next
         })
       } else {
+        // Open tab before rename so updateTabPath in the store picks it up
+        usePanesStore.getState().openTab(id)
         void renameNote(id, name)
       }
     },
@@ -162,7 +239,25 @@ function NotesSidebar(): React.JSX.Element {
       const targetFolder = parentId ? parentId.replace(/^folder:/, '') : ''
 
       for (const dragId of dragIds) {
-        if (dragId.startsWith('folder:')) continue
+        if (dragId.startsWith('folder:')) {
+          const folderPath = dragId.replace(/^folder:/, '')
+          const folderName = folderPath.split('/').pop()
+          if (!folderName) continue
+
+          const newPath = targetFolder ? `${targetFolder}/${folderName}` : folderName
+          if (newPath !== folderPath) {
+            void renameFolder(folderPath, newPath)
+            setPendingFolders((prev) => {
+              const next = new Set(prev)
+              if (next.has(folderPath)) {
+                next.delete(folderPath)
+                next.add(newPath)
+              }
+              return next
+            })
+          }
+          continue
+        }
 
         const fileName = dragId.split('/').pop()
         if (!fileName) continue
@@ -173,7 +268,7 @@ function NotesSidebar(): React.JSX.Element {
         }
       }
     },
-    [moveNote]
+    [moveNote, renameFolder]
   )
 
   const handleContextMenu = useCallback(
@@ -188,10 +283,16 @@ function NotesSidebar(): React.JSX.Element {
       const nodeId = nodeEl?.dataset.nodeId ?? null
       const node = nodeId ? tree.get(nodeId) : null
 
+      // Preserve multi-selection if right-clicked node is already selected
       if (node) {
+        if (!node.isSelected) {
+          node.select()
+        }
         node.focus()
-        node.select()
       }
+
+      const selectedNodes = tree.selectedNodes
+      const isMulti = selectedNodes.length > 1
 
       const isMac = window.windowControls.platform === 'darwin'
       const hasCut = clipboardRef.current !== null
@@ -201,7 +302,21 @@ function NotesSidebar(): React.JSX.Element {
       // Build menu items based on what was right-clicked
       let items: Item[]
 
-      if (node?.data.isNote) {
+      if (!node) {
+        items = [
+          { id: 'new-note', label: 'New Note' },
+          { id: 'new-folder', label: 'New Folder' },
+          ...(hasCut ? [{ id: 'paste', label: 'Paste', accelerator: 'CmdOrCtrl+V' }] : [])
+        ]
+      } else if (isMulti) {
+        const hasNotes = selectedNodes.some((n) => n.data.isNote)
+        items = [
+          { id: 'cut', label: `Cut ${selectedNodes.length} Items`, accelerator: 'CmdOrCtrl+X' },
+          { id: 'sep-1', label: '', separator: true },
+          ...(hasNotes ? [{ id: 'archive', label: 'Archive Notes' }] : []),
+          { id: 'delete', label: `Delete ${selectedNodes.length} Items` }
+        ]
+      } else if (node.data.isNote) {
         items = [
           { id: 'cut', label: 'Cut', accelerator: 'CmdOrCtrl+X' },
           { id: 'copy-path', label: 'Copy Path', accelerator: 'CmdOrCtrl+C' },
@@ -214,7 +329,7 @@ function NotesSidebar(): React.JSX.Element {
             ? [{ id: 'reveal', label: 'Reveal in Finder' }]
             : [{ id: 'reveal', label: 'Show in Explorer' }])
         ]
-      } else if (node) {
+      } else {
         items = [
           { id: 'new-note', label: 'New Note' },
           { id: 'new-folder', label: 'New Folder' },
@@ -230,48 +345,42 @@ function NotesSidebar(): React.JSX.Element {
             ? [{ id: 'reveal', label: 'Reveal in Finder' }]
             : [{ id: 'reveal', label: 'Show in Explorer' }])
         ]
-      } else {
-        items = [
-          { id: 'new-note', label: 'New Note' },
-          { id: 'new-folder', label: 'New Folder' },
-          ...(hasCut ? [{ id: 'paste', label: 'Paste', accelerator: 'CmdOrCtrl+V' }] : [])
-        ]
       }
 
       const clickedId = await window.contextMenu.show(items)
       if (!clickedId) return
+
+      const targets = isMulti ? selectedNodes : (node ? [node] : [])
 
       switch (clickedId) {
         case 'rename':
           node?.edit()
           break
         case 'archive':
-          if (node) void archiveNote(node.data.relativePath)
+          for (const n of targets) {
+            if (n.data.isNote) void archiveNote(n.data.relativePath)
+          }
           break
         case 'delete':
-          if (node?.data.isNote) {
-            void deleteNote(node.data.relativePath)
-          } else if (node) {
-            const folderPath = node.data.relativePath
-            for (const n of notes.filter((n) => n.relativePath.startsWith(folderPath + '/'))) {
-              void deleteNote(n.relativePath)
+          for (const n of targets) {
+            if (n.data.isNote) {
+              void deleteNote(n.data.relativePath)
+            } else {
+              const folderPath = n.data.relativePath
+              for (const note of notes.filter((x) => x.relativePath.startsWith(folderPath + '/'))) {
+                void deleteNote(note.relativePath)
+              }
             }
           }
           break
         case 'new-note':
-          void createNote(node?.data.relativePath)
+          tree.createLeaf()
           break
         case 'new-folder':
-          if (node) {
-            void createFolder(`${node.data.relativePath}/New Folder`)
-          } else {
-            void createFolder('New Folder')
-          }
+          tree.createInternal()
           break
         case 'cut':
-          if (node) {
-            clipboardRef.current = { relativePath: node.data.relativePath }
-          }
+          clipboardRef.current = { relativePaths: targets.map((n) => n.data.relativePath) }
           break
         case 'copy-path':
           if (node) {
@@ -281,12 +390,14 @@ function NotesSidebar(): React.JSX.Element {
         case 'paste': {
           const clip = clipboardRef.current
           if (!clip) break
-          const fileName = clip.relativePath.split('/').pop()
-          if (!fileName) break
           const targetFolder = node ? node.data.relativePath : ''
-          const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName
-          if (newPath !== clip.relativePath) {
-            void moveNote(clip.relativePath, newPath)
+          for (const srcPath of clip.relativePaths) {
+            const fileName = srcPath.split('/').pop()
+            if (!fileName) continue
+            const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName
+            if (newPath !== srcPath) {
+              void moveNote(srcPath, newPath)
+            }
           }
           clipboardRef.current = null
           break
@@ -299,7 +410,7 @@ function NotesSidebar(): React.JSX.Element {
           break
       }
     },
-    [notes, config.vaultPath, createNote, createFolder, deleteNote, archiveNote, moveNote]
+    [notes, config.vaultPath, createNote, deleteNote, archiveNote, moveNote]
   )
 
   return (
@@ -389,7 +500,7 @@ function NotesSidebar(): React.JSX.Element {
               ) : (
                 <div
                   ref={containerRef}
-                  className="-mx-3 min-h-0 flex-1"
+                  className="relative -mx-3 min-h-0 flex-1"
                   onContextMenu={handleContextMenu}
                 >
                   <Tree<NoteTreeNode>
@@ -397,12 +508,14 @@ function NotesSidebar(): React.JSX.Element {
                     data={treeData}
                     width="100%"
                     height={containerHeight}
-                    rowHeight={28}
+                    rowHeight={TREE_ROW_HEIGHT}
                     indent={20}
                     openByDefault={false}
-                    selection={activeRelativePath ?? undefined}
-                    disableMultiSelection
                     dndManager={dndManager}
+                    onScroll={({ scrollOffset }) => {
+                      scrollOffsetRef.current = scrollOffset
+                      refreshStickyFolderRows(scrollOffset)
+                    }}
                     onCreate={handleCreate}
                     onRename={handleRename}
                     onDelete={handleDelete}
@@ -410,6 +523,27 @@ function NotesSidebar(): React.JSX.Element {
                   >
                     {NoteTreeNodeRenderer}
                   </Tree>
+                  {stickyFolderRows.map((row, index) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      className={`absolute inset-x-0 z-10 flex h-7 w-full items-center gap-[5px] bg-sidebar pr-2 text-left text-[0.8rem] transition-[background-color,color] duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-foreground)_8%,var(--sidebar))] ${index === stickyFolderRows.length - 1 ? 'border-b border-border' : ''}`}
+                      style={{ top: index * TREE_ROW_HEIGHT }}
+                      title={row.relativePath}
+                      onClick={() => treeRef.current?.get(row.id)?.toggle()}
+                    >
+                      <div
+                        className="flex h-full items-center gap-[5px] text-[0.8rem]"
+                        style={{ paddingLeft: row.level * 20 + 12 }}
+                      >
+                        <span className="inline-flex w-4 shrink-0 items-center justify-center">
+                          <ChevronRight className="size-3.5 rotate-90 text-muted-foreground" />
+                        </span>
+                        <FolderOpen className="size-[14px] shrink-0 text-muted-foreground" />
+                        <span className="truncate font-[520] text-sidebar-foreground">{row.name}</span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </>

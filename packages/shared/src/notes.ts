@@ -62,6 +62,13 @@ export function isUntitledPath(path: string): boolean {
   return path.startsWith(UNTITLED_PREFIX)
 }
 
+export type SearchContentMatch = {
+  relativePath: string
+  title: string
+  snippet: string
+  mtimeMs: number
+}
+
 export const NOTES_IPC_CHANNELS = {
   getConfig: 'notes:get-config',
   pickVault: 'notes:pick-vault',
@@ -76,5 +83,6 @@ export const NOTES_IPC_CHANNELS = {
   archive: 'notes:archive',
   move: 'notes:move',
   createFolder: 'notes:create-folder',
-  renameFolder: 'notes:rename-folder'
+  renameFolder: 'notes:rename-folder',
+  searchContent: 'notes:search-content'
 } as const

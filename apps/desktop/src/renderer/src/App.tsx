@@ -4,6 +4,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getDefaultShortcutBindings, type ShortcutActionId } from '@onpoint/shared/shortcuts'
 import { AppShell } from '@/components/layout/app-shell'
+import { SearchPalette } from '@/components/search/search-palette'
 import { SettingsSidebarNav } from '@/components/layout/settings-sidebar-nav'
 import { NotesSidebar } from '@/components/notes/notes-sidebar'
 import { IS_DETACHED_WINDOW } from '@/lib/detached-window'
@@ -25,6 +26,7 @@ function App(): React.JSX.Element {
   const [shortcutBindings, setShortcutBindings] = useState(getDefaultShortcutBindings)
   const [isShortcutsLoading, setIsShortcutsLoading] = useState(true)
   const [isGhostMode, setIsGhostMode] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
 
   const dispatchShortcutAction = useCallback(
     (actionId: ShortcutActionId): void => {
@@ -128,6 +130,11 @@ function App(): React.JSX.Element {
 
       if (actionId === 'new_window') {
         void window.windowControls.newWindow()
+        return
+      }
+
+      if (actionId === 'search') {
+        setIsSearchOpen(true)
       }
     },
     [createNote, navigate, pickVault, toggleSidebar]
@@ -198,7 +205,7 @@ function App(): React.JSX.Element {
 
   return (
     <DndProvider backend={HTML5Backend}>
-    <AppShell sidebarContent={sidebarContent} isGhostMode={isGhostMode}>
+    <AppShell sidebarContent={sidebarContent} onOpenSearch={() => setIsSearchOpen(true)} isGhostMode={isGhostMode}>
       {IS_DETACHED_WINDOW ? (
         <HomePage />
       ) : (
@@ -242,6 +249,9 @@ function App(): React.JSX.Element {
         </Routes>
       )}
     </AppShell>
+    {isSearchOpen && (
+      <SearchPalette onClose={() => setIsSearchOpen(false)} />
+    )}
     </DndProvider>
   )
 }
