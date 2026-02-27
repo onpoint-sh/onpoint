@@ -1,0 +1,27 @@
+{
+  "name": "@onpoint/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "onpoint": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/onpoint.cjs",
+    "build:sea": "node scripts/build-sea.js"
+  },
+  "dependencies": {
+    "@onpoint/notes-core": "workspace:*",
+    "@onpoint/shared": "workspace:*",
+    "commander": "^13.0.0",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "esbuild": "^0.25.0",
+    "postject": "^1.0.0-alpha.6",
+    "typescript": "^5.9.3"
+  }
+}

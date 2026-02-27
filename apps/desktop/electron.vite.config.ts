@@ -9,7 +9,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      // Bundle workspace packages (raw .ts, can't be loaded by Node at runtime)
+      // and @electron-toolkit (its require('electron') must resolve via Electron's
+      // runtime module, not pnpm's npm stub)
+      externalizeDeps: {
+        exclude: [
+          '@onpoint/notes-core',
+          '@onpoint/shared',
+          '@electron-toolkit/utils'
+        ]
+      }
+    }
+  },
   preload: {},
   renderer: {
     resolve: {

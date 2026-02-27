@@ -1,0 +1,20 @@
+{
+  "name": "@onpoint/notes-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./vault-files": "./src/vault-files.ts",
+    "./vault-config": "./src/vault-config.ts",
+    "./fuzzy-search": "./src/fuzzy-search.ts",
+    "./notes-tree": "./src/notes-tree.ts",
+    "./markdown-strip": "./src/markdown-strip.ts"
+  },
+  "files": ["src"],
+  "dependencies": {
+    "@onpoint/shared": "workspace:*"
+  }
+}

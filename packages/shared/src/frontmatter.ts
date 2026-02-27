@@ -126,6 +126,21 @@ export function replaceFrontmatterTitle(raw: string, newTitle: string): string {
   return frontmatterBlock + body
 }
 
+export const SUPPORTED_FRONTMATTER_KEYS = ['title', 'created'] as const
+export type FrontmatterKey = (typeof SUPPORTED_FRONTMATTER_KEYS)[number]
+
+export function isSupportedFrontmatterKey(key: string): key is FrontmatterKey {
+  return (SUPPORTED_FRONTMATTER_KEYS as readonly string[]).includes(key)
+}
+
+export function setFrontmatterProperty(
+  metadata: NoteFrontmatter,
+  key: FrontmatterKey,
+  value: string
+): NoteFrontmatter {
+  return { ...metadata, [key]: value }
+}
+
 export function migrateFromHeading(raw: string, created?: string): string {
   if (FRONTMATTER_RE.test(raw)) {
     return raw

@@ -13,7 +13,8 @@
     "lint": "eslint --cache .",
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "cli": "tsx apps/cli/src/index.ts"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

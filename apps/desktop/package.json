@@ -15,12 +15,13 @@
     "dev": "electron-vite dev",
     "build": "pnpm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
-    "build:unpack": "pnpm run build && electron-builder --dir",
-    "build:win": "pnpm run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:unpack": "pnpm run build && pnpm --filter @onpoint/cli build:sea && electron-builder --dir",
+    "build:win": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --win",
+    "build:mac": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --mac",
+    "build:linux": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
+    "@onpoint/notes-core": "workspace:*",
     "@onpoint/shared": "workspace:*",
     "@onpoint/themes": "workspace:*",
     "@onpoint/ui": "workspace:*",

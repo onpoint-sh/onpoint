@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu } from 'electron'
+import { handleInstallCli } from './cli-installer'
 
 type MenuOptions = {
   onNewWindow: () => void
@@ -16,6 +17,13 @@ export function setupApplicationMenu(options: MenuOptions): void {
               { role: 'about' as const },
               { type: 'separator' as const },
               { role: 'services' as const },
+              { type: 'separator' as const },
+              {
+                label: 'Install Command Line Tool…',
+                click: (): void => {
+                  void handleInstallCli()
+                }
+              },
               { type: 'separator' as const },
               { role: 'hide' as const },
               { role: 'hideOthers' as const },
@@ -49,6 +57,17 @@ export function setupApplicationMenu(options: MenuOptions): void {
             }
           }
         },
+        ...(!isMac
+          ? [
+              { type: 'separator' as const },
+              {
+                label: 'Install Command Line Tool…',
+                click: (): void => {
+                  void handleInstallCli()
+                }
+              }
+            ]
+          : []),
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
       ]
