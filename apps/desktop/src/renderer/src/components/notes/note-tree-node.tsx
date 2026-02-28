@@ -7,6 +7,7 @@ import { usePanesStore } from '@/stores/panes-store'
 const BASE_PADDING_LEFT = 12
 
 const justCreatedIds = new Set<string>()
+// eslint-disable-next-line react-refresh/only-export-components
 export function markAsJustCreated(id: string): void {
   justCreatedIds.add(id)
 }
@@ -64,8 +65,7 @@ function NoteTreeNodeRenderer({
           <input
             ref={inputRef}
             autoFocus
-            className="h-[22px] flex-1 rounded-[3px] border border-sidebar-ring bg-sidebar px-1.5 text-[0.8rem] text-sidebar-foreground outline-none"
-
+            className="h-auto flex-1 rounded-none border border-sidebar-ring bg-sidebar p-0 text-[0.8rem] text-sidebar-foreground outline-none"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => {
@@ -92,9 +92,7 @@ function NoteTreeNodeRenderer({
       ref={dragHandle}
       data-node-id={node.id}
       className={`group h-full w-full cursor-pointer transition-[background-color,color] duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] ${
-        isActive
-          ? 'bg-[color-mix(in_oklch,var(--sidebar-accent)_60%,transparent)]'
-          : ''
+        isActive ? 'bg-[color-mix(in_oklch,var(--sidebar-accent)_60%,transparent)]' : ''
       } ${node.isSelected && !isActive ? 'bg-[color-mix(in_oklch,var(--sidebar-accent)_50%,transparent)]' : ''}`}
       onClick={handleClick}
       onDoubleClick={() => {

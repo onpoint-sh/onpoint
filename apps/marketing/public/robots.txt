@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://onpoint.sh/sitemap-index.xml

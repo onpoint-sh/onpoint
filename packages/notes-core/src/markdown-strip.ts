@@ -8,8 +8,10 @@
  * Removes: headings markers, bold/italic, links, images, code fences,
  * list markers, blockquotes, horizontal rules, and inline code.
  */
+const MAX_STRIP_LENGTH = 1_000_000
+
 export function stripMarkdown(text: string): string {
-  let result = text
+  let result = text.length > MAX_STRIP_LENGTH ? text.slice(0, MAX_STRIP_LENGTH) : text
 
   // Remove fenced code blocks (``` or ~~~)
   result = result.replace(/^(`{3,}|~{3,})[\s\S]*?^\1\s*$/gm, '')
@@ -128,7 +130,8 @@ export function stripLinks(text: string): string {
  * Remove fenced code blocks entirely.
  */
 export function stripCodeBlocks(text: string): string {
-  return text.replace(/^(`{3,}|~{3,}).*\n[\s\S]*?^\1\s*$/gm, '').trim()
+  const input = text.length > MAX_STRIP_LENGTH ? text.slice(0, MAX_STRIP_LENGTH) : text
+  return input.replace(/^(`{3,}|~{3,}).*\n[\s\S]*?^\1\s*$/gm, '').trim()
 }
 
 /**

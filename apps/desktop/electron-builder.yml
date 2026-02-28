@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: sh.onpoint.app
 productName: onpoint
 directories:
   buildResources: build
@@ -10,8 +10,8 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 extraResources:
-  - from: "../cli/dist/onpoint"
-    to: "bin/onpoint"
+  - from: '../cli/dist/onpoint'
+    to: 'bin/onpoint'
 asarUnpack:
   - resources/**
 win:
@@ -41,8 +41,8 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+# publish:
+#   provider: generic
+#   url: https://example.com/auto-updates
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

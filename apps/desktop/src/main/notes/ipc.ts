@@ -26,16 +26,29 @@ import {
   createVaultNote,
   deleteVaultNote,
   ensureVaultPath,
+  listVaultFolders,
   listVaultNotes,
   moveVaultNote,
   openVaultNote,
   renameVaultFolder,
   renameVaultNote,
+  sanitizeRelativePath,
   saveVaultNote,
   searchVaultContent
 } from './files'
 import { loadNotesConfig, saveNotesConfig } from './store'
 import { windowRegistry } from '../window/window-registry'
+
+function validateRelativePath(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) throw new Error('Invalid note path.')
+  return sanitizeRelativePath(value)
+}
+
+function validateNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0)
+    throw new Error(`${label} must be a non-empty string.`)
+  return value
+}
 
 function removeNotesHandlers(): void {
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.getConfig)
@@ -53,6 +66,7 @@ function removeNotesHandlers(): void {
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.createFolder)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.renameFolder)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.searchContent)
+  ipcMain.removeHandler(NOTES_IPC_CHANNELS.listFolders)
 }
 
 function getWindowFromEvent(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -158,6 +172,11 @@ async function listNotes(windowId: string): Promise<NoteSummary[]> {
   return listVaultNotes(vaultPath)
 }
 
+async function listFolders(windowId: string): Promise<string[]> {
+  const vaultPath = await ensureConfiguredVaultPath(windowId)
+  return listVaultFolders(vaultPath)
+}
+
 async function openNote(windowId: string, relativePath: string): Promise<NoteDocument> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const note = await openVaultNote(vaultPath, relativePath)
@@ -239,8 +258,15 @@ async function saveNoteAs(
   const { promises: fs } = await import('node:fs')
   const { relative } = await import('node:path')
 
+  const { randomUUID } = await import('node:crypto')
+  const { isPathInsideRoot } = await import('@onpoint/notes-core/vault-files')
+
   const filePath = result.filePath
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  if (!isPathInsideRoot(vaultPath, filePath)) {
+    throw new Error('File must be saved inside the vault.')
+  }
+
+  const tempPath = `${filePath}.${randomUUID()}.tmp`
   await fs.writeFile(tempPath, content, 'utf-8')
   await fs.rename(tempPath, filePath)
 
@@ -248,10 +274,7 @@ async function saveNoteAs(
   const relativePath = relative(vaultPath, filePath).replace(/\\/g, '/')
 
   const config = await loadNotesConfig(windowId)
-  await saveNotesConfig(
-    windowId,
-    mergeConfig(config, { lastOpenedRelativePath: relativePath })
-  )
+  await saveNotesConfig(windowId, mergeConfig(config, { lastOpenedRelativePath: relativePath }))
 
   return { relativePath, mtimeMs: fileStats.mtimeMs }
 }
@@ -345,6 +368,8 @@ export function registerNotesIpc(): () => void {
   })
 
   ipcMain.handle(NOTES_IPC_CHANNELS.setVault, (event, vaultPath: string) => {
+    validateNonEmptyString(vaultPath, 'Vault path')
+    if (vaultPath.includes('\0')) throw new Error('Invalid vault path.')
     return setVaultConfig(resolveWindowId(event), vaultPath)
   })
 
@@ -353,18 +378,21 @@ export function registerNotesIpc(): () => void {
   })
 
   ipcMain.handle(NOTES_IPC_CHANNELS.open, (event, relativePath: string) => {
-    return openNote(resolveWindowId(event), relativePath)
+    return openNote(resolveWindowId(event), validateRelativePath(relativePath))
   })
 
   ipcMain.handle(
     NOTES_IPC_CHANNELS.create,
     (event, input?: CreateNoteInput, parentRelativePath?: string) => {
-      return createNote(resolveWindowId(event), input, parentRelativePath)
+      const sanitizedParent = parentRelativePath
+        ? validateRelativePath(parentRelativePath)
+        : undefined
+      return createNote(resolveWindowId(event), input, sanitizedParent)
     }
   )
 
   ipcMain.handle(NOTES_IPC_CHANNELS.save, (event, relativePath: string, content: string) => {
-    return saveNote(resolveWindowId(event), relativePath, content)
+    return saveNote(resolveWindowId(event), validateRelativePath(relativePath), content)
   })
 
   ipcMain.handle(NOTES_IPC_CHANNELS.saveAs, (event, content: string) => {
@@ -374,37 +402,54 @@ export function registerNotesIpc(): () => void {
   ipcMain.handle(
     NOTES_IPC_CHANNELS.rename,
     (event, relativePath: string, requestedTitle: string) => {
-      return renameNote(resolveWindowId(event), relativePath, requestedTitle)
+      return renameNote(
+        resolveWindowId(event),
+        validateRelativePath(relativePath),
+        validateNonEmptyString(requestedTitle, 'Title')
+      )
     }
   )
 
   ipcMain.handle(NOTES_IPC_CHANNELS.delete, (event, relativePath: string) => {
-    return deleteNote(resolveWindowId(event), relativePath)
+    return deleteNote(resolveWindowId(event), validateRelativePath(relativePath))
   })
 
   ipcMain.handle(NOTES_IPC_CHANNELS.archive, (event, relativePath: string) => {
-    return archiveNote(resolveWindowId(event), relativePath)
+    return archiveNote(resolveWindowId(event), validateRelativePath(relativePath))
   })
 
   ipcMain.handle(
     NOTES_IPC_CHANNELS.move,
     (event, fromRelativePath: string, toRelativePath: string) => {
-      return moveNote(resolveWindowId(event), fromRelativePath, toRelativePath)
+      return moveNote(
+        resolveWindowId(event),
+        validateRelativePath(fromRelativePath),
+        validateRelativePath(toRelativePath)
+      )
     }
   )
 
   ipcMain.handle(NOTES_IPC_CHANNELS.createFolder, (event, relativePath: string) => {
-    return createFolder(resolveWindowId(event), relativePath)
+    return createFolder(resolveWindowId(event), validateRelativePath(relativePath))
   })
 
   ipcMain.handle(
     NOTES_IPC_CHANNELS.renameFolder,
     (event, fromRelativePath: string, toRelativePath: string) => {
-      return renameFolder(resolveWindowId(event), fromRelativePath, toRelativePath)
+      return renameFolder(
+        resolveWindowId(event),
+        validateRelativePath(fromRelativePath),
+        validateRelativePath(toRelativePath)
+      )
     }
   )
 
+  ipcMain.handle(NOTES_IPC_CHANNELS.listFolders, (event) => {
+    return listFolders(resolveWindowId(event))
+  })
+
   ipcMain.handle(NOTES_IPC_CHANNELS.searchContent, async (event, query: string) => {
+    validateNonEmptyString(query, 'Search query')
     const vaultPath = await ensureConfiguredVaultPath(resolveWindowId(event))
     return searchVaultContent(vaultPath, query)
   })

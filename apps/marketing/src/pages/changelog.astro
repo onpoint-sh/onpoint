@@ -1,0 +1,75 @@
+---
+import { getCollection } from 'astro:content'
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Header from '../components/Header'
+import Footer from '../components/Footer.astro'
+
+const entries = (await getCollection('changelog')).sort(
+  (a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime()
+)
+---
+
+<BaseLayout title="Changelog - ONPOINT" description="The latest updates, improvements, and new features in ONPOINT.">
+  <Header client:load />
+
+  <main class="min-h-screen bg-background pt-24 pb-16">
+    <div class="mx-auto max-w-3xl px-6 sm:px-8">
+      <header class="border-b border-border pb-8 mb-16">
+        <p class="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">Changelog</p>
+        <h1 class="text-3xl sm:text-4xl font-medium text-foreground">What's New</h1>
+        <p class="mt-4 text-muted-foreground leading-relaxed">
+          All the latest updates, improvements, and fixes to ONPOINT.
+        </p>
+      </header>
+
+      {entries.length === 0 ? (
+        <p class="text-muted-foreground">No updates yet. Check back soon.</p>
+      ) : (
+        <div class="flex flex-col">
+          {entries.map(async (entry, i) => {
+            const { Content } = await entry.render()
+            const date = new Date(entry.data.date).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })
+
+            return (
+              <article class:list={['relative pl-8 pb-16', i < entries.length - 1 && 'border-l border-border']}>
+                {/* Timeline dot */}
+                <div class="absolute -left-[5px] top-1 size-[10px] rounded-full bg-foreground" />
+
+                {/* Date */}
+                <time class="block text-sm font-mono text-muted-foreground mb-4">{date}</time>
+
+                {/* Title */}
+                <h2 class="text-2xl font-medium text-foreground mb-2">{entry.data.title}</h2>
+
+                {/* Description */}
+                {entry.data.description && (
+                  <p class="text-muted-foreground mb-6">{entry.data.description}</p>
+                )}
+
+                {/* Featured image */}
+                {entry.data.image && (
+                  <img
+                    src={entry.data.image}
+                    alt={entry.data.title}
+                    class="w-full rounded-lg border border-border mb-6"
+                  />
+                )}
+
+                {/* Rendered markdown content */}
+                <div class="changelog-prose">
+                  <Content />
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  </main>
+
+  <Footer />
+</BaseLayout>

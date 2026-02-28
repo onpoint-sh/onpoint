@@ -7,11 +7,12 @@ import {
   FilePlus,
   FolderOpen,
   FolderPlus,
-  Settings,
+  Settings
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
+import { useTreeStateStore } from '@/stores/tree-state-store'
 import { buildNotesTree, type NoteTreeNode } from '@/lib/notes-tree'
 import { NoteTreeNodeRenderer, markAsJustCreated } from './note-tree-node'
 import useResizeObserver from './use-resize-observer'
@@ -40,10 +41,15 @@ function NotesSidebar(): React.JSX.Element {
   const createFolder = useNotesStore((s) => s.createFolder)
   const renameFolder = useNotesStore((s) => s.renameFolder)
 
+  const expandedFolders = useTreeStateStore((s) => s.expandedFolders)
+  const setExpandedFolders = useTreeStateStore((s) => s.setExpandedFolders)
+
   const treeRef = useRef<TreeApi<NoteTreeNode>>(null)
+  const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerHeight, setContainerHeight] = useState(400)
   const [pendingFolders, setPendingFolders] = useState<Set<string>>(new Set())
+  const [diskFolders, setDiskFolders] = useState<string[]>([])
   const [isTreeOpen, setIsTreeOpen] = useState(true)
   const [stickyFolderRows, setStickyFolderRows] = useState<StickyFolderRow[]>([])
   const clipboardRef = useRef<{ relativePaths: string[] } | null>(null)
@@ -67,18 +73,35 @@ function NotesSidebar(): React.JSX.Element {
     if (next.size !== pendingFolders.size) setPendingFolders(next)
   }, [notes, pendingFolders])
 
+  // Fetch all folders from disk so empty ones appear in the tree
+  useEffect(() => {
+    let cancelled = false
+    window.notes
+      .listFolders()
+      .then((folders) => {
+        if (!cancelled) setDiskFolders(folders)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [notes])
+
   const treeData = useMemo(
-    () => buildNotesTree(notes, [...pendingFolders]),
-    [notes, pendingFolders]
+    () => buildNotesTree(notes, [...new Set([...diskFolders, ...pendingFolders])]),
+    [notes, diskFolders, pendingFolders]
   )
 
-  const getFolderNodeFromTopNode = useCallback((node: NodeApi<NoteTreeNode> | null): NodeApi<NoteTreeNode> | null => {
-    if (!node) return null
-    if (!node.data.isNote) return node
-    const parent = node.parent
-    if (!parent || parent.isRoot || parent.data.isNote) return null
-    return parent
-  }, [])
+  const getFolderNodeFromTopNode = useCallback(
+    (node: NodeApi<NoteTreeNode> | null): NodeApi<NoteTreeNode> | null => {
+      if (!node) return null
+      if (!node.data.isNote) return node
+      const parent = node.parent
+      if (!parent || parent.isRoot || parent.data.isNote) return null
+      return parent
+    },
+    []
+  )
 
   const refreshStickyFolderRows = useCallback(
     (scrollOffset: number) => {
@@ -117,10 +140,7 @@ function NotesSidebar(): React.JSX.Element {
       }
 
       setStickyFolderRows((prev) => {
-        if (
-          prev.length === nextRows.length &&
-          prev.every((row, i) => row.id === nextRows[i]?.id)
-        ) {
+        if (prev.length === nextRows.length && prev.every((row, i) => row.id === nextRows[i]?.id)) {
           return prev
         }
         return nextRows
@@ -151,12 +171,14 @@ function NotesSidebar(): React.JSX.Element {
       if (type === 'internal') {
         let folderName = 'New Folder'
         let counter = 2
-        const existingIds = new Set(treeData.flatMap(function collectIds(n): string[] {
-          const ids = [n.id]
-          if (n.children) ids.push(...n.children.flatMap(collectIds))
-          return ids
-        }))
-        // eslint-disable-next-line no-constant-condition
+        const existingIds = new Set(
+          treeData.flatMap(function collectIds(n): string[] {
+            const ids = [n.id]
+            if (n.children) ids.push(...n.children.flatMap(collectIds))
+            return ids
+          })
+        )
+
         while (true) {
           const candidatePath = parentPath ? `${parentPath}/${folderName}` : folderName
           if (!existingIds.has(`folder:${candidatePath}`) && !pendingFolders.has(candidatePath)) {
@@ -228,14 +250,7 @@ function NotesSidebar(): React.JSX.Element {
   )
 
   const handleMove = useCallback(
-    ({
-      dragIds,
-      parentId
-    }: {
-      dragIds: string[]
-      parentId: string | null
-      index: number
-    }) => {
+    ({ dragIds, parentId }: { dragIds: string[]; parentId: string | null; index: number }) => {
       const targetFolder = parentId ? parentId.replace(/^folder:/, '') : ''
 
       for (const dragId of dragIds) {
@@ -270,6 +285,15 @@ function NotesSidebar(): React.JSX.Element {
     },
     [moveNote, renameFolder]
   )
+
+  const handleToggle = useCallback(() => {
+    if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current)
+    toggleTimerRef.current = setTimeout(() => {
+      const tree = treeRef.current
+      if (!tree) return
+      setExpandedFolders({ ...tree.openState })
+    }, 0)
+  }, [setExpandedFolders])
 
   const handleContextMenu = useCallback(
     async (e: React.MouseEvent) => {
@@ -350,7 +374,7 @@ function NotesSidebar(): React.JSX.Element {
       const clickedId = await window.contextMenu.show(items)
       if (!clickedId) return
 
-      const targets = isMulti ? selectedNodes : (node ? [node] : [])
+      const targets = isMulti ? selectedNodes : node ? [node] : []
 
       switch (clickedId) {
         case 'rename':
@@ -476,7 +500,10 @@ function NotesSidebar(): React.JSX.Element {
                 type="button"
                 className="inline-flex size-6 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
                 title="Collapse All Folders"
-                onClick={() => treeRef.current?.closeAll()}
+                onClick={() => {
+                  treeRef.current?.closeAll()
+                  handleToggle()
+                }}
               >
                 <ChevronsDownUp className="size-3.5" />
               </button>
@@ -511,7 +538,9 @@ function NotesSidebar(): React.JSX.Element {
                     rowHeight={TREE_ROW_HEIGHT}
                     indent={20}
                     openByDefault={false}
+                    initialOpenState={expandedFolders}
                     dndManager={dndManager}
+                    onToggle={handleToggle}
                     onScroll={({ scrollOffset }) => {
                       scrollOffsetRef.current = scrollOffset
                       refreshStickyFolderRows(scrollOffset)
@@ -530,7 +559,10 @@ function NotesSidebar(): React.JSX.Element {
                       className={`absolute inset-x-0 z-10 flex h-7 w-full items-center gap-[5px] bg-sidebar pr-2 text-left text-[0.8rem] transition-[background-color,color] duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-foreground)_8%,var(--sidebar))] ${index === stickyFolderRows.length - 1 ? 'border-b border-border' : ''}`}
                       style={{ top: index * TREE_ROW_HEIGHT }}
                       title={row.relativePath}
-                      onClick={() => treeRef.current?.get(row.id)?.toggle()}
+                      onClick={() => {
+                        treeRef.current?.get(row.id)?.toggle()
+                        handleToggle()
+                      }}
                     >
                       <div
                         className="flex h-full items-center gap-[5px] text-[0.8rem]"
@@ -540,7 +572,9 @@ function NotesSidebar(): React.JSX.Element {
                           <ChevronRight className="size-3.5 rotate-90 text-muted-foreground" />
                         </span>
                         <FolderOpen className="size-[14px] shrink-0 text-muted-foreground" />
-                        <span className="truncate font-[520] text-sidebar-foreground">{row.name}</span>
+                        <span className="truncate font-[520] text-sidebar-foreground">
+                          {row.name}
+                        </span>
                       </div>
                     </button>
                   ))}

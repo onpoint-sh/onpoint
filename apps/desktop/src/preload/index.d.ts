@@ -76,6 +76,7 @@ type NotesAPI = {
   createFolder: (relativePath: string) => Promise<CreateFolderResult>
   renameFolder: (fromPath: string, toPath: string) => Promise<RenameFolderResult>
   searchContent: (query: string) => Promise<SearchContentMatch[]>
+  listFolders: () => Promise<string[]>
 }
 
 type ContextMenuItem = {
@@ -91,6 +92,11 @@ type ContextMenuAPI = {
   revealInFinder: (absolutePath: string) => Promise<void>
 }
 
+type MenuEventsAPI = {
+  onTriggerPickVault: (callback: () => void) => () => void
+  onTriggerCreateNote: (callback: () => void) => () => void
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -99,5 +105,6 @@ declare global {
     notes: NotesAPI
     ghostMode: GhostModeAPI
     contextMenu: ContextMenuAPI
+    menuEvents: MenuEventsAPI
   }
 }

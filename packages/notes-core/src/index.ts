@@ -13,6 +13,7 @@ export {
   ensureVaultPath,
   toNoteSummary,
   listVaultNotes,
+  listVaultFolders,
   sortNotes,
   resolveNotePath,
   openVaultNote,

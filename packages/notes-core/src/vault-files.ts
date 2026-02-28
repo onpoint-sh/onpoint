@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import {
   basename,
@@ -34,6 +35,8 @@ import {
   stripMarkdown as doStripMarkdown
 } from './markdown-strip'
 
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
+
 export type DeleteStrategy = (absolutePath: string) => Promise<void>
 
 type BodyCacheEntry = {
@@ -44,6 +47,14 @@ type BodyCacheEntry = {
 
 // Per-vault body cache: keyed by resolved vault path → (relativePath → entry)
 const vaultBodyCaches = new Map<string, Map<string, BodyCacheEntry>>()
+
+function invalidateCacheEntry(vaultPath: string, relativePath: string): void {
+  vaultBodyCaches.get(vaultPath)?.delete(relativePath)
+}
+
+function invalidateVaultCache(vaultPath: string): void {
+  vaultBodyCaches.delete(vaultPath)
+}
 
 export function toPosixPath(value: string): string {
   return value.replace(/\\/g, '/')
@@ -170,6 +181,7 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue
     if (entry.name === '.obsidian') continue
+    if (entry.isSymbolicLink()) continue
 
     const absolutePath = join(directoryPath, entry.name)
 
@@ -181,11 +193,21 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
 
     if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue
 
-    const [content, fileStats] = await Promise.all([
-      fs.readFile(absolutePath, 'utf-8'),
-      fs.stat(absolutePath)
-    ])
-    const summary = toNoteSummary(vaultPath, absolutePath, content, fileStats.mtimeMs, fileStats.size)
+    let content: string
+    try {
+      content = await fs.readFile(absolutePath, 'utf-8')
+    } catch {
+      continue
+    }
+    if (Buffer.byteLength(content, 'utf-8') > MAX_FILE_SIZE_BYTES) continue
+    const fileStats = await fs.stat(absolutePath)
+    const summary = toNoteSummary(
+      vaultPath,
+      absolutePath,
+      content,
+      fileStats.mtimeMs,
+      fileStats.size
+    )
     files.push(summary)
 
     // Populate body cache (piggyback on existing I/O)
@@ -200,6 +222,31 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
   }
 
   return files
+}
+
+async function walkDirectories(vaultPath: string, directoryPath: string): Promise<string[]> {
+  const entries = await fs.readdir(directoryPath, { withFileTypes: true })
+  const folders: string[] = []
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
+    if (entry.name === '.obsidian') continue
+    if (entry.isSymbolicLink()) continue
+
+    if (entry.isDirectory()) {
+      const absolutePath = join(directoryPath, entry.name)
+      folders.push(toPosixPath(relative(vaultPath, absolutePath)))
+      const nestedFolders = await walkDirectories(vaultPath, absolutePath)
+      folders.push(...nestedFolders)
+    }
+  }
+
+  return folders
+}
+
+export async function listVaultFolders(vaultPath: string): Promise<string[]> {
+  const resolvedVaultPath = await ensureVaultPath(vaultPath)
+  return walkDirectories(resolvedVaultPath, resolvedVaultPath)
 }
 
 export async function listVaultNotes(vaultPath: string): Promise<NoteSummary[]> {
@@ -228,21 +275,38 @@ export function resolveNotePath(vaultPath: string, relativePath: string): string
   return absolutePath
 }
 
+async function assertRealPathInsideVault(absolutePath: string, vaultPath: string): Promise<void> {
+  const realPath = await fs.realpath(absolutePath)
+  if (!isPathInsideRoot(vaultPath, realPath)) {
+    throw new Error('Invalid note path.')
+  }
+}
+
+async function assertParentRealPathInsideVault(
+  absolutePath: string,
+  vaultPath: string
+): Promise<void> {
+  const parentDir = dirname(absolutePath)
+  const realParent = await fs.realpath(parentDir)
+  if (realParent !== vaultPath && !isPathInsideRoot(vaultPath, realParent)) {
+    throw new Error('Invalid note path.')
+  }
+}
+
 export async function openVaultNote(
   vaultPath: string,
   relativePath: string
 ): Promise<NoteDocument> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
   const absolutePath = resolveNotePath(resolvedVaultPath, relativePath)
-  const [rawContent, fileStats] = await Promise.all([
-    fs.readFile(absolutePath, 'utf-8'),
-    fs.stat(absolutePath)
-  ])
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
+  const rawContent = await fs.readFile(absolutePath, 'utf-8')
+  if (Buffer.byteLength(rawContent, 'utf-8') > MAX_FILE_SIZE_BYTES) {
+    throw new Error(`File exceeds maximum size of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB.`)
+  }
+  const fileStats = await fs.stat(absolutePath)
 
-  const content = migrateFromHeading(
-    rawContent,
-    new Date(fileStats.birthtimeMs).toISOString()
-  )
+  const content = migrateFromHeading(rawContent, new Date(fileStats.birthtimeMs).toISOString())
 
   return {
     relativePath: sanitizeRelativePath(relativePath),
@@ -251,10 +315,7 @@ export async function openVaultNote(
   }
 }
 
-async function buildUniqueFilePath(
-  parentPath: string,
-  input?: CreateNoteInput
-): Promise<string> {
+async function buildUniqueFilePath(parentPath: string, input?: CreateNoteInput): Promise<string> {
   const slug = input?.requestedTitle ? slugifyTitle(input.requestedTitle) : ''
 
   for (let suffix = 0; suffix < 100; suffix += 1) {
@@ -296,6 +357,7 @@ export async function createVaultNote(
     }
 
     await fs.mkdir(parentAbsolute, { recursive: true })
+    await assertRealPathInsideVault(parentAbsolute, resolvedVaultPath)
   }
 
   const absolutePath = await buildUniqueFilePath(parentAbsolute, input)
@@ -316,12 +378,14 @@ export async function saveVaultNote(
 ): Promise<SaveNoteResult> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
   const absolutePath = resolveNotePath(resolvedVaultPath, relativePath)
-  const tempPath = `${absolutePath}.${process.pid}.${Date.now()}.tmp`
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
+  const tempPath = `${absolutePath}.${randomUUID()}.tmp`
 
   await fs.writeFile(tempPath, content, 'utf-8')
   await fs.rename(tempPath, absolutePath)
 
   const fileStats = await fs.stat(absolutePath)
+  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(relativePath))
 
   return {
     mtimeMs: fileStats.mtimeMs
@@ -335,17 +399,19 @@ export async function renameVaultNote(
 ): Promise<RenameNoteResult> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
   const absolutePath = resolveNotePath(resolvedVaultPath, relativePath)
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
   const title = normalizeNoteTitle(requestedTitle)
   const currentContent = await fs.readFile(absolutePath, 'utf-8')
   const migrated = migrateFromHeading(currentContent)
   const nextContent = replaceFrontmatterTitle(migrated, title)
-  const tempPath = `${absolutePath}.${process.pid}.${Date.now()}.tmp`
+  const tempPath = `${absolutePath}.${randomUUID()}.tmp`
 
   await fs.writeFile(tempPath, nextContent, 'utf-8')
   await fs.rename(tempPath, absolutePath)
 
   const nextRelativePath = toPosixPath(relative(resolvedVaultPath, absolutePath))
   const fileStats = await fs.stat(absolutePath)
+  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(relativePath))
 
   return {
     relativePath: nextRelativePath,
@@ -361,8 +427,7 @@ export async function deleteVaultNote(
 ): Promise<DeleteNoteResult> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
   const absolutePath = resolveNotePath(resolvedVaultPath, relativePath)
-
-  await fs.stat(absolutePath)
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
 
   if (deleteStrategy) {
     await deleteStrategy(absolutePath)
@@ -370,6 +435,7 @@ export async function deleteVaultNote(
     await fs.unlink(absolutePath)
   }
 
+  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(relativePath))
   return { deletedPath: sanitizeRelativePath(relativePath) }
 }
 
@@ -380,8 +446,7 @@ export async function archiveVaultNote(
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
   const sanitizedPath = sanitizeRelativePath(relativePath)
   const absolutePath = resolveNotePath(resolvedVaultPath, sanitizedPath)
-
-  await fs.stat(absolutePath)
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
 
   const archiveDir = join(resolvedVaultPath, '.archive')
   let archiveDest = join(archiveDir, sanitizedPath)
@@ -396,9 +461,11 @@ export async function archiveVaultNote(
   }
 
   await fs.mkdir(dirname(archiveDest), { recursive: true })
+  await assertParentRealPathInsideVault(archiveDest, resolvedVaultPath)
   await fs.rename(absolutePath, archiveDest)
 
   const archivedTo = toPosixPath(relative(resolvedVaultPath, archiveDest))
+  invalidateCacheEntry(resolvedVaultPath, sanitizedPath)
   return { archivedTo }
 }
 
@@ -409,17 +476,18 @@ export async function moveVaultNote(
 ): Promise<MoveNoteResult> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
   const fromAbsolute = resolveNotePath(resolvedVaultPath, fromRelativePath)
+  await assertRealPathInsideVault(fromAbsolute, resolvedVaultPath)
   const toSanitized = sanitizeRelativePath(toRelativePath)
   const toAbsolute = resolve(resolvedVaultPath, toSanitized)
 
   if (!isPathInsideRoot(resolvedVaultPath, toAbsolute)) {
     throw new Error('Invalid destination path.')
   }
-
-  await fs.stat(fromAbsolute)
   await fs.mkdir(dirname(toAbsolute), { recursive: true })
+  await assertParentRealPathInsideVault(toAbsolute, resolvedVaultPath)
   await fs.rename(fromAbsolute, toAbsolute)
 
+  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(fromRelativePath))
   const fileStats = await fs.stat(toAbsolute)
   return {
     relativePath: toPosixPath(relative(resolvedVaultPath, toAbsolute)),
@@ -440,6 +508,7 @@ export async function createVaultFolder(
   }
 
   await fs.mkdir(absolutePath, { recursive: true })
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
   return { relativePath: toPosixPath(relative(resolvedVaultPath, absolutePath)) }
 }
 
@@ -548,8 +617,11 @@ export async function renameVaultFolder(
     throw new Error('Source path is not a directory.')
   }
 
+  await assertRealPathInsideVault(fromAbsolute, resolvedVaultPath)
   await fs.mkdir(dirname(toAbsolute), { recursive: true })
+  await assertParentRealPathInsideVault(toAbsolute, resolvedVaultPath)
   await fs.rename(fromAbsolute, toAbsolute)
 
+  invalidateVaultCache(resolvedVaultPath)
   return { relativePath: toPosixPath(relative(resolvedVaultPath, toAbsolute)) }
 }

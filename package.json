@@ -1,8 +1,13 @@
 {
   "name": "onpoint-monorepo",
   "private": true,
+  "license": "AGPL-3.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "esbuild", "electron-winstaller"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "electron-winstaller"
+    ]
   },
   "scripts": {
     "dev": "pnpm --filter @onpoint/desktop dev",
@@ -14,11 +19,26 @@
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "cli": "tsx apps/cli/src/index.ts"
+    "dev:marketing": "pnpm --filter @onpoint/marketing dev",
+    "build:marketing": "pnpm --filter @onpoint/marketing build",
+    "cli": "tsx apps/cli/src/index.ts",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,yml,yaml,md}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
-    "prettier": "^3.7.4",
     "eslint": "^9.39.1",
+    "eslint-plugin-security": "^4.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
     "typescript": "^5.9.3"
   }
 }

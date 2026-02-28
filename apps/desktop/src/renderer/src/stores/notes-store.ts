@@ -27,7 +27,7 @@ const DEFAULT_NOTES_CONFIG: NotesConfig = {
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.length > 0) {
-    return error.message
+    return error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')
   }
 
   return fallback
@@ -74,9 +74,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
       // If no panes exist but we have a last-opened note, create a pane for it
       const panesState = usePanesStore.getState()
       if (panesState.layout === null && config.lastOpenedRelativePath) {
-        const hasNote = notes.some(
-          (n) => n.relativePath === config.lastOpenedRelativePath
-        )
+        const hasNote = notes.some((n) => n.relativePath === config.lastOpenedRelativePath)
         if (hasNote) {
           usePanesStore.getState().openTab(config.lastOpenedRelativePath!)
         }
@@ -111,6 +109,9 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
   },
 
   createNote: async (parentRelativePath?: string) => {
+    const { config } = get()
+    if (!config.vaultPath) return null
+
     set({ isLoading: true, error: null })
 
     try {
@@ -257,10 +258,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
           if (tab.relativePath.startsWith(fromPath + '/')) {
             usePanesStore
               .getState()
-              .updateTabPath(
-                tab.relativePath,
-                tab.relativePath.replace(fromPath, toPath)
-              )
+              .updateTabPath(tab.relativePath, tab.relativePath.replace(fromPath, toPath))
           }
         }
       }

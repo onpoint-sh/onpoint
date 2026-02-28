@@ -4,6 +4,8 @@
     { "path": "apps/desktop/tsconfig.node.json" },
     { "path": "apps/desktop/tsconfig.web.json" },
     { "path": "apps/cli/tsconfig.json" },
-    { "path": "packages/notes-core/tsconfig.json" }
+    { "path": "packages/notes-core/tsconfig.json" },
+    { "path": "packages/app-preview/tsconfig.json" },
+    { "path": "apps/marketing/tsconfig.json" }
   ]
 }

@@ -2,6 +2,7 @@
   "name": "@onpoint/shared",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -14,5 +15,7 @@
     "./window": "./src/window.ts",
     "./ghost-mode": "./src/ghost-mode.ts"
   },
-  "files": ["src"]
+  "files": [
+    "src"
+  ]
 }

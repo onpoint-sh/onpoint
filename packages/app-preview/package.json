@@ -1,0 +1,36 @@
+{
+  "name": "@onpoint/app-preview",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./styles/app-preview.css": "./src/styles/app-preview.css"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "dependencies": {
+    "@onpoint/notes-core": "workspace:*",
+    "@onpoint/shared": "workspace:*",
+    "@tiptap/extension-code-block-lowlight": "^3.20.0",
+    "@tiptap/extension-link": "^3.20.0",
+    "@tiptap/extension-task-item": "^3.20.0",
+    "@tiptap/extension-task-list": "^3.20.0",
+    "@tiptap/markdown": "^3.20.0",
+    "@tiptap/react": "^3.20.0",
+    "@tiptap/starter-kit": "^3.20.0",
+    "lowlight": "^3.3.0",
+    "lucide-react": "^0.575.0",
+    "react-arborist": "^3.4.3",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-mosaic-component": "^6.1.1",
+    "zustand": "^5.0.8"
+  }
+}

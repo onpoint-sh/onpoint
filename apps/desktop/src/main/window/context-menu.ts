@@ -1,4 +1,6 @@
 import { BrowserWindow, Menu, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { existsSync, realpathSync } from 'node:fs'
+import { normalize, isAbsolute } from 'node:path'
 
 const SHOW_CHANNEL = 'context-menu:show'
 const REVEAL_CHANNEL = 'context-menu:reveal-in-finder'
@@ -60,6 +62,16 @@ export function registerContextMenu(): void {
   )
 
   ipcMain.handle(REVEAL_CHANNEL, (_event: IpcMainInvokeEvent, absolutePath: string) => {
-    shell.showItemInFolder(absolutePath)
+    if (typeof absolutePath !== 'string' || absolutePath.length === 0) return
+    const normalized = normalize(absolutePath)
+    if (!isAbsolute(normalized) || normalized.includes('\0')) return
+    if (!existsSync(normalized)) return
+    let resolved: string
+    try {
+      resolved = realpathSync(normalized)
+    } catch {
+      return
+    }
+    shell.showItemInFolder(resolved)
   })
 }

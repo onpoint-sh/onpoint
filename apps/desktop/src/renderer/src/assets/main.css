@@ -966,6 +966,7 @@ body.sidebar-resizing {
 /* ── Pane Tab Bar ── */
 
 .pane-tab-bar {
+  position: relative;
   display: flex;
   align-items: stretch;
   min-height: 0;
@@ -973,6 +974,26 @@ body.sidebar-resizing {
   flex-shrink: 0;
   background: var(--sidebar);
   border-bottom: 1px solid var(--border);
+}
+
+.pane-tab-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: color-mix(in oklch, var(--sidebar-foreground) 25%, transparent);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 1;
+  width: var(--scroll-thumb-width, 0px);
+  transform: translateX(var(--scroll-thumb-x, 0px));
+}
+
+.pane-tab-bar.is-scrolling::after {
+  opacity: 1;
 }
 
 .pane-tab-bar-scroll {

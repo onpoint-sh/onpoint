@@ -13,8 +13,36 @@ const TITLE_RE = /^title:\s*(.+)$/m
 const CREATED_RE = /^created:\s*(.+)$/m
 const HEADING_RE = /^\s*#(?!#)\s+(.+?)\s*$/m
 
+const YAML_BOOLEANS = new Set([
+  'true',
+  'false',
+  'yes',
+  'no',
+  'on',
+  'off',
+  'True',
+  'False',
+  'Yes',
+  'No',
+  'On',
+  'Off',
+  'TRUE',
+  'FALSE',
+  'YES',
+  'NO',
+  'ON',
+  'OFF'
+])
+
 function needsYamlQuoting(value: string): boolean {
-  return /[:#\[\]{}]/.test(value) || value !== value.trim()
+  if (value !== value.trim()) return true
+  if (YAML_BOOLEANS.has(value)) return true
+  if (value === 'null' || value === 'Null' || value === 'NULL' || value === '~') return true
+  // eslint-disable-next-line security/detect-unsafe-regex
+  if (/^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value)) return true
+  if (/^[+-]?\.\d+(?:[eE][+-]?\d+)?$/.test(value)) return true
+  if (/[:#[\]{}@`*&!|>]/.test(value)) return true
+  return false
 }
 
 function yamlQuote(value: string): string {
@@ -33,7 +61,7 @@ function yamlUnquote(value: string): string {
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
     const inner = trimmed.slice(1, -1)
-    return inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+    return inner.replace(/\\\\/g, '\\').replace(/\\"/g, '"')
   }
 
   return trimmed
@@ -73,7 +101,7 @@ export function buildNoteContent(metadata: NoteFrontmatter, body: string): strin
   }
 
   if (metadata.created != null) {
-    lines.push(`created: ${metadata.created}`)
+    lines.push(`created: ${yamlQuote(metadata.created)}`)
   }
 
   lines.push('---')
@@ -102,10 +130,7 @@ export function replaceFrontmatterTitle(raw: string, newTitle: string): string {
 
   if (!match) {
     const { metadata } = parseFrontmatter(raw)
-    return buildNoteContent(
-      { title: newTitle, created: metadata.created },
-      raw
-    )
+    return buildNoteContent({ title: newTitle, created: metadata.created }, raw)
   }
 
   const yamlBlock = match[1]
@@ -166,8 +191,5 @@ export function migrateFromHeading(raw: string, created?: string): string {
   // Clean up leading newlines from body
   body = body.replace(/^\n+/, '')
 
-  return buildNoteContent(
-    { title, created: created ?? null },
-    body
-  )
+  return buildNoteContent({ title, created: created ?? null }, body)
 }

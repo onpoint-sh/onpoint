@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, Menu, shell } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../../resources/icon.png?asset'
@@ -56,14 +56,18 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     frame: isMac,
     ...(isMac
       ? {
-        titleBarStyle: 'hiddenInset' as const,
-        trafficLightPosition: { x: 14, y: 12 }
-      }
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 12 }
+        }
       : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: !is.dev,
+      contextIsolation: true,
+      nodeIntegration: false,
+      devTools: is.dev,
+      spellcheck: true
     }
   })
 
@@ -106,8 +110,43 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     emitZoomFactorState(mainWindow)
   })
 
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable) return
+
+    const menuItems: Electron.MenuItemConstructorOptions[] = []
+
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions) {
+        menuItems.push({
+          label: suggestion,
+          click: () => mainWindow.webContents.replaceMisspelling(suggestion)
+        })
+      }
+      if (menuItems.length > 0) {
+        menuItems.push({ type: 'separator' })
+      }
+    }
+
+    menuItems.push(
+      { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
+      { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
+      { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { label: 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll }
+    )
+
+    Menu.buildFromTemplate(menuItems).popup()
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    try {
+      const url = new URL(details.url)
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        shell.openExternal(details.url)
+      }
+    } catch {
+      // Invalid URL — silently deny
+    }
     return { action: 'deny' }
   })
 

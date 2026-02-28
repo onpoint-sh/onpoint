@@ -1,7 +1,35 @@
 import { join, dirname } from 'node:path'
-import { existsSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import {
+  existsSync,
+  readlinkSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+  mkdtempSync,
+  rmSync,
+  chmodSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { execFileSync } from 'node:child_process'
 import { app, dialog } from 'electron'
+
+function macosElevated(command: string, args: string[]): void {
+  // Write a temp script with args embedded (avoids shell/AppleScript injection)
+  const tmpDir = mkdtempSync(join(tmpdir(), 'onpoint-'))
+  chmodSync(tmpDir, 0o700)
+  const scriptPath = join(tmpDir, 'run.sh')
+  try {
+    const quotedArgs = args.map((a) => "'" + a.replace(/'/g, "'\\''") + "'").join(' ')
+    writeFileSync(scriptPath, `#!/bin/sh\nexec ${command} ${quotedArgs}\n`, { mode: 0o700 })
+    // scriptPath is a temp dir path with no special chars — safe to embed directly
+    execFileSync('osascript', [
+      '-e',
+      `do shell script "${scriptPath}" with administrator privileges`
+    ])
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
 
 const BINARY_NAME = process.platform === 'win32' ? 'onpoint.exe' : 'onpoint'
 
@@ -37,7 +65,9 @@ async function installCli(): Promise<void> {
   const target = getInstallPath()
 
   if (!existsSync(source)) {
-    throw new Error(`CLI binary not found at ${source}. Build it first with: pnpm --filter @onpoint/cli build:sea`)
+    throw new Error(
+      `CLI binary not found at ${source}. Build it first with: pnpm --filter @onpoint/cli build:sea`
+    )
   }
 
   // Ensure target directory exists
@@ -49,24 +79,22 @@ async function installCli(): Promise<void> {
     }
   }
 
-  // Remove existing symlink/file if present
+  // Create symlink, handling existing files atomically
   try {
-    if (existsSync(target)) {
-      unlinkSync(target)
-    }
     symlinkSync(source, target)
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      unlinkSync(target)
+      symlinkSync(source, target)
+      return
+    }
     if ((err as NodeJS.ErrnoException).code !== 'EACCES') throw err
 
-    // Permission denied — escalate via osascript on macOS
+    // Permission denied — escalate with admin privileges
     if (process.platform === 'darwin') {
-      const escapedSource = source.replace(/"/g, '\\"')
-      const escapedTarget = target.replace(/"/g, '\\"')
-      execSync(
-        `osascript -e 'do shell script "ln -sf \\"${escapedSource}\\" \\"${escapedTarget}\\"" with administrator privileges'`
-      )
+      macosElevated('/bin/ln', ['-sf', source, target])
     } else if (process.platform === 'linux') {
-      execSync(`pkexec ln -sf "${source}" "${target}"`)
+      execFileSync('pkexec', ['ln', '-sf', source, target])
     } else {
       throw err
     }
@@ -84,12 +112,9 @@ async function uninstallCli(): Promise<void> {
     if ((err as NodeJS.ErrnoException).code !== 'EACCES') throw err
 
     if (process.platform === 'darwin') {
-      const escapedTarget = target.replace(/"/g, '\\"')
-      execSync(
-        `osascript -e 'do shell script "rm \\"${escapedTarget}\\"" with administrator privileges'`
-      )
+      macosElevated('/bin/rm', [target])
     } else if (process.platform === 'linux') {
-      execSync(`pkexec rm "${target}"`)
+      execFileSync('pkexec', ['rm', target])
     } else {
       throw err
     }

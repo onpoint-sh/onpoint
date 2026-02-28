@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
 import { X, Pin } from 'lucide-react'
 import { isUntitledPath } from '@onpoint/shared/notes'
@@ -83,7 +83,9 @@ function DraggableTab({
     })
   })
 
-  drag(drop(ref))
+  useEffect(() => {
+    drag(drop(ref))
+  }, [drag, drop])
 
   return (
     <div
@@ -101,11 +103,7 @@ function DraggableTab({
       {isPinned && <Pin className="pane-tab-bar-tab-pin size-3" />}
       <span className="pane-tab-bar-tab-label">{label}</span>
       <span className="pane-tab-bar-tab-dirty-dot" />
-      <button
-        className="pane-tab-bar-tab-close"
-        onClick={onClose}
-        tabIndex={-1}
-      >
+      <button className="pane-tab-bar-tab-close" onClick={onClose} tabIndex={-1}>
         <X className="pane-tab-bar-close-x size-3" />
       </button>
     </div>
@@ -186,153 +184,228 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
     [handleRequestClose]
   )
 
-  const handleContextMenu = useCallback(async (e: React.MouseEvent, tabId: string) => {
-    e.preventDefault()
+  const handleContextMenu = useCallback(
+    async (e: React.MouseEvent, tabId: string) => {
+      e.preventDefault()
 
-    const tab = pane?.tabs.find((t) => t.id === tabId)
-    const isPinned = Boolean(tab?.pinned)
+      const tab = pane?.tabs.find((t) => t.id === tabId)
+      const isPinned = Boolean(tab?.pinned)
 
-    console.log('[ctx-menu] opening', { paneId, tabId, tab, pane: !!pane })
+      console.log('[ctx-menu] opening', { paneId, tabId, tab, pane: !!pane })
 
-    const clickedId = await window.contextMenu.show([
-      isPinned
-        ? { id: 'unpin', label: 'Unpin Tab' }
-        : { id: 'pin', label: 'Pin Tab' },
-      { id: 'sep-1', label: '', separator: true },
-      { id: 'close', label: 'Close' },
-      { id: 'close-others', label: 'Close Others' },
-      { id: 'close-all', label: 'Close All' },
-      { id: 'sep-2', label: '', separator: true },
-      { id: 'split-right', label: 'Split Right' },
-      {
-        id: 'split-move', label: 'Split && Move',
-        submenu: [
-          { id: 'split-up', label: 'Split Up' },
-          { id: 'split-down', label: 'Split Down' },
-          { id: 'split-left', label: 'Split Left' },
-          { id: 'split-right-move', label: 'Split Right' },
-          { id: 'sep-sm', label: '', separator: true },
-          { id: 'move-above', label: 'Move Above' },
-          { id: 'move-below', label: 'Move Below' },
-          { id: 'move-left', label: 'Move Left' },
-          { id: 'move-right', label: 'Move Right' }
-        ]
-      },
-      { id: 'sep-3', label: '', separator: true },
-      { id: 'move-to-window', label: 'Move into New Window' }
-    ])
+      const clickedId = await window.contextMenu.show([
+        isPinned ? { id: 'unpin', label: 'Unpin Tab' } : { id: 'pin', label: 'Pin Tab' },
+        { id: 'sep-1', label: '', separator: true },
+        { id: 'close', label: 'Close' },
+        { id: 'close-others', label: 'Close Others' },
+        { id: 'close-all', label: 'Close All' },
+        { id: 'sep-2', label: '', separator: true },
+        { id: 'split-right', label: 'Split Right' },
+        {
+          id: 'split-move',
+          label: 'Split && Move',
+          submenu: [
+            { id: 'split-up', label: 'Split Up' },
+            { id: 'split-down', label: 'Split Down' },
+            { id: 'split-left', label: 'Split Left' },
+            { id: 'split-right-move', label: 'Split Right' },
+            { id: 'sep-sm', label: '', separator: true },
+            { id: 'move-above', label: 'Move Above' },
+            { id: 'move-below', label: 'Move Below' },
+            { id: 'move-left', label: 'Move Left' },
+            { id: 'move-right', label: 'Move Right' }
+          ]
+        },
+        { id: 'sep-3', label: '', separator: true },
+        { id: 'move-to-window', label: 'Move into New Window' }
+      ])
 
-    console.log('[ctx-menu] clicked:', clickedId)
+      console.log('[ctx-menu] clicked:', clickedId)
 
-    try {
-      switch (clickedId) {
-        case 'pin':
-          console.log('[ctx-menu] pinTab', paneId, tabId)
-          pinTab(paneId, tabId)
-          break
-        case 'unpin':
-          console.log('[ctx-menu] unpinTab', paneId, tabId)
-          unpinTab(paneId, tabId)
-          break
-        case 'close':
-          console.log('[ctx-menu] close', paneId, tabId)
-          handleRequestClose(tabId)
-          break
-        case 'close-others':
-          console.log('[ctx-menu] closeOtherTabs', paneId, tabId)
-          closeOtherTabs(paneId, tabId)
-          break
-        case 'close-all':
-          console.log('[ctx-menu] closeAll', paneId)
-          for (const t of usePanesStore.getState().panes[paneId]?.tabs ?? []) {
-            closeTab(paneId, t.id)
+      try {
+        switch (clickedId) {
+          case 'pin':
+            console.log('[ctx-menu] pinTab', paneId, tabId)
+            pinTab(paneId, tabId)
+            break
+          case 'unpin':
+            console.log('[ctx-menu] unpinTab', paneId, tabId)
+            unpinTab(paneId, tabId)
+            break
+          case 'close':
+            console.log('[ctx-menu] close', paneId, tabId)
+            handleRequestClose(tabId)
+            break
+          case 'close-others':
+            console.log('[ctx-menu] closeOtherTabs', paneId, tabId)
+            closeOtherTabs(paneId, tabId)
+            break
+          case 'close-all':
+            console.log('[ctx-menu] closeAll', paneId)
+            for (const t of usePanesStore.getState().panes[paneId]?.tabs ?? []) {
+              closeTab(paneId, t.id)
+            }
+            break
+          case 'split-right':
+            console.log('[ctx-menu] splitPane row', paneId)
+            splitPane(paneId, 'row')
+            break
+          case 'split-up':
+            console.log('[ctx-menu] splitPaneWithTab column/first', paneId, tabId)
+            splitPaneWithTab(paneId, 'column', 'first', paneId, tabId)
+            break
+          case 'split-down':
+            console.log('[ctx-menu] splitPaneWithTab column/second', paneId, tabId)
+            splitPaneWithTab(paneId, 'column', 'second', paneId, tabId)
+            break
+          case 'split-left':
+            console.log('[ctx-menu] splitPaneWithTab row/first', paneId, tabId)
+            splitPaneWithTab(paneId, 'row', 'first', paneId, tabId)
+            break
+          case 'split-right-move':
+            console.log('[ctx-menu] splitPaneWithTab row/second', paneId, tabId)
+            splitPaneWithTab(paneId, 'row', 'second', paneId, tabId)
+            break
+          case 'move-above': {
+            const state = usePanesStore.getState()
+            const target = findAdjacentPaneId(state.layout, paneId, 'up')
+            console.log('[ctx-menu] move-above', { target, layout: JSON.stringify(state.layout) })
+            if (target) moveTabToPane(paneId, tabId, target)
+            else splitPaneWithTab(paneId, 'column', 'first', paneId, tabId)
+            break
           }
-          break
-        case 'split-right':
-          console.log('[ctx-menu] splitPane row', paneId)
-          splitPane(paneId, 'row')
-          break
-        case 'split-up':
-          console.log('[ctx-menu] splitPaneWithTab column/first', paneId, tabId)
-          splitPaneWithTab(paneId, 'column', 'first', paneId, tabId)
-          break
-        case 'split-down':
-          console.log('[ctx-menu] splitPaneWithTab column/second', paneId, tabId)
-          splitPaneWithTab(paneId, 'column', 'second', paneId, tabId)
-          break
-        case 'split-left':
-          console.log('[ctx-menu] splitPaneWithTab row/first', paneId, tabId)
-          splitPaneWithTab(paneId, 'row', 'first', paneId, tabId)
-          break
-        case 'split-right-move':
-          console.log('[ctx-menu] splitPaneWithTab row/second', paneId, tabId)
-          splitPaneWithTab(paneId, 'row', 'second', paneId, tabId)
-          break
-        case 'move-above': {
-          const state = usePanesStore.getState()
-          const target = findAdjacentPaneId(state.layout, paneId, 'up')
-          console.log('[ctx-menu] move-above', { target, layout: JSON.stringify(state.layout) })
-          if (target) moveTabToPane(paneId, tabId, target)
-          else splitPaneWithTab(paneId, 'column', 'first', paneId, tabId)
-          break
-        }
-        case 'move-below': {
-          const state = usePanesStore.getState()
-          const target = findAdjacentPaneId(state.layout, paneId, 'down')
-          console.log('[ctx-menu] move-below', { target, layout: JSON.stringify(state.layout) })
-          if (target) moveTabToPane(paneId, tabId, target)
-          else splitPaneWithTab(paneId, 'column', 'second', paneId, tabId)
-          break
-        }
-        case 'move-left': {
-          const state = usePanesStore.getState()
-          const target = findAdjacentPaneId(state.layout, paneId, 'left')
-          console.log('[ctx-menu] move-left', { target, layout: JSON.stringify(state.layout) })
-          if (target) moveTabToPane(paneId, tabId, target)
-          else splitPaneWithTab(paneId, 'row', 'first', paneId, tabId)
-          break
-        }
-        case 'move-right': {
-          const state = usePanesStore.getState()
-          const target = findAdjacentPaneId(state.layout, paneId, 'right')
-          console.log('[ctx-menu] move-right', { target, layout: JSON.stringify(state.layout) })
-          if (target) moveTabToPane(paneId, tabId, target)
-          else splitPaneWithTab(paneId, 'row', 'second', paneId, tabId)
-          break
-        }
-        case 'move-to-window': {
-          console.log('[ctx-menu] move-to-window', { tab })
-          if (tab) {
-            const detached = await window.windowControls.detachTab(tab.relativePath, true)
-            console.log('[ctx-menu] detachTab result:', detached)
-            if (detached) closeTab(paneId, tabId)
+          case 'move-below': {
+            const state = usePanesStore.getState()
+            const target = findAdjacentPaneId(state.layout, paneId, 'down')
+            console.log('[ctx-menu] move-below', { target, layout: JSON.stringify(state.layout) })
+            if (target) moveTabToPane(paneId, tabId, target)
+            else splitPaneWithTab(paneId, 'column', 'second', paneId, tabId)
+            break
           }
-          break
+          case 'move-left': {
+            const state = usePanesStore.getState()
+            const target = findAdjacentPaneId(state.layout, paneId, 'left')
+            console.log('[ctx-menu] move-left', { target, layout: JSON.stringify(state.layout) })
+            if (target) moveTabToPane(paneId, tabId, target)
+            else splitPaneWithTab(paneId, 'row', 'first', paneId, tabId)
+            break
+          }
+          case 'move-right': {
+            const state = usePanesStore.getState()
+            const target = findAdjacentPaneId(state.layout, paneId, 'right')
+            console.log('[ctx-menu] move-right', { target, layout: JSON.stringify(state.layout) })
+            if (target) moveTabToPane(paneId, tabId, target)
+            else splitPaneWithTab(paneId, 'row', 'second', paneId, tabId)
+            break
+          }
+          case 'move-to-window': {
+            console.log('[ctx-menu] move-to-window', { tab })
+            if (tab) {
+              const detached = await window.windowControls.detachTab(tab.relativePath, true)
+              console.log('[ctx-menu] detachTab result:', detached)
+              if (detached) closeTab(paneId, tabId)
+            }
+            break
+          }
+          default:
+            console.log('[ctx-menu] unhandled clickedId:', clickedId)
         }
-        default:
-          console.log('[ctx-menu] unhandled clickedId:', clickedId)
+      } catch (err) {
+        console.error('[ctx-menu] error handling action:', clickedId, err)
       }
-    } catch (err) {
-      console.error('[ctx-menu] error handling action:', clickedId, err)
-    }
-  }, [paneId, pane, pinTab, unpinTab, handleRequestClose, closeOtherTabs, closeTab, splitPane, splitPaneWithTab, moveTabToPane])
+    },
+    [
+      paneId,
+      pane,
+      pinTab,
+      unpinTab,
+      handleRequestClose,
+      closeOtherTabs,
+      closeTab,
+      splitPane,
+      splitPaneWithTab,
+      moveTabToPane
+    ]
+  )
 
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.pane-tab-bar-tab')) return
-    openUntitledTab(paneId)
-  }, [paneId, openUntitledTab])
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.pane-tab-bar-tab')) return
+      openUntitledTab(paneId)
+    },
+    [paneId, openUntitledTab]
+  )
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollContainerRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      scrollContainerRef.current.scrollLeft += e.deltaY
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const tabBarRef = useRef<HTMLDivElement>(null)
+
+  const updateScrollThumb = useCallback((el: HTMLElement) => {
+    const bar = tabBarRef.current
+    if (!bar) return
+    if (el.scrollWidth <= el.clientWidth) {
+      bar.style.setProperty('--scroll-thumb-width', '0px')
+      return
     }
+    const ratio = el.clientWidth / el.scrollWidth
+    const thumbWidth = ratio * el.clientWidth
+    const maxScroll = el.scrollWidth - el.clientWidth
+    const scrollRatio = maxScroll > 0 ? el.scrollLeft / maxScroll : 0
+    const thumbX = scrollRatio * (el.clientWidth - thumbWidth)
+    bar.style.setProperty('--scroll-thumb-width', `${thumbWidth}px`)
+    bar.style.setProperty('--scroll-thumb-x', `${thumbX}px`)
   }, [])
+
+  const showScrollIndicator = useCallback(
+    (el: HTMLElement) => {
+      const bar = tabBarRef.current
+      if (!bar) return
+      bar.classList.add('is-scrolling')
+      updateScrollThumb(el)
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      scrollTimeoutRef.current = setTimeout(() => {
+        bar.classList.remove('is-scrolling')
+      }, 800)
+    },
+    [updateScrollThumb]
+  )
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      const el = scrollContainerRef.current
+      if (!el) return
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        el.scrollLeft += e.deltaY
+      }
+      showScrollIndicator(el)
+    },
+    [showScrollIndicator]
+  )
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    showScrollIndicator(el)
+  }, [showScrollIndicator])
 
   if (!pane) return null
 
   return (
-    <div className="pane-tab-bar" data-drop-target={isBarOver} onWheel={handleWheel}>
-      <div ref={(node) => { barDropRef(node); scrollContainerRef.current = node }} className="pane-tab-bar-scroll" onDoubleClick={handleDoubleClick}>
+    <div
+      ref={tabBarRef}
+      className="pane-tab-bar"
+      data-drop-target={isBarOver}
+      onWheel={handleWheel}
+    >
+      <div
+        ref={(node) => {
+          barDropRef(node)
+          scrollContainerRef.current = node
+        }}
+        className="pane-tab-bar-scroll"
+        onDoubleClick={handleDoubleClick}
+        onScroll={handleScroll}
+      >
         {pane.tabs.map((tab, index) => (
           <DraggableTab
             key={tab.id}
@@ -372,9 +445,7 @@ function CloseConfirmDialog({
     <>
       <div className="close-confirm-overlay" onClick={onCancel} />
       <div className="close-confirm-dialog">
-        <p className="close-confirm-title">
-          Do you want to save the changes you made to {label}?
-        </p>
+        <p className="close-confirm-title">Do you want to save the changes you made to {label}?</p>
         <p className="close-confirm-description">
           Your changes will be lost if you don&apos;t save them.
         </p>

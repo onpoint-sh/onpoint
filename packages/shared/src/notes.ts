@@ -84,5 +84,6 @@ export const NOTES_IPC_CHANNELS = {
   move: 'notes:move',
   createFolder: 'notes:create-folder',
   renameFolder: 'notes:rename-folder',
-  searchContent: 'notes:search-content'
+  searchContent: 'notes:search-content',
+  listFolders: 'notes:list-folders'
 } as const

@@ -38,6 +38,21 @@ export function setupApplicationMenu(options: MenuOptions): void {
       label: 'File',
       submenu: [
         {
+          label: 'New Note',
+          accelerator: 'CmdOrCtrl+N',
+          click: (_menuItem, browserWindow): void => {
+            const window =
+              browserWindow instanceof BrowserWindow
+                ? browserWindow
+                : BrowserWindow.getAllWindows()[0]
+            if (window && !window.isDestroyed()) {
+              window.webContents.send('menu:trigger-create-note')
+            } else {
+              options.onNewWindow()
+            }
+          }
+        },
+        {
           label: 'New Window',
           accelerator: 'CmdOrCtrl+Shift+N',
           click: (): void => {
@@ -49,11 +64,12 @@ export function setupApplicationMenu(options: MenuOptions): void {
           label: 'Open Folder…',
           accelerator: 'CmdOrCtrl+O',
           click: (_menuItem, browserWindow): void => {
-            const window = browserWindow ?? BrowserWindow.getAllWindows()[0]
+            const window =
+              browserWindow instanceof BrowserWindow
+                ? browserWindow
+                : BrowserWindow.getAllWindows()[0]
             if (window && !window.isDestroyed()) {
-              void window.webContents.executeJavaScript(
-                `window.notes.pickVault()`
-              )
+              window.webContents.send('menu:trigger-pick-vault')
             }
           }
         },
@@ -90,10 +106,7 @@ export function setupApplicationMenu(options: MenuOptions): void {
         { role: 'minimize' },
         { role: 'zoom' },
         ...(isMac
-          ? [
-              { type: 'separator' as const },
-              { role: 'front' as const }
-            ]
+          ? [{ type: 'separator' as const }, { role: 'front' as const }]
           : [{ role: 'close' as const }])
       ]
     }

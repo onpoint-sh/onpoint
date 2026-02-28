@@ -8,11 +8,13 @@ export {
   createVaultFolder,
   createVaultNote,
   ensureVaultPath,
+  listVaultFolders,
   listVaultNotes,
   moveVaultNote,
   openVaultNote,
   renameVaultFolder,
   renameVaultNote,
+  sanitizeRelativePath,
   saveVaultNote,
   searchVaultContent
 } from '@onpoint/notes-core/vault-files'

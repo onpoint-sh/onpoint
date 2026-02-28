@@ -22,6 +22,9 @@ program.addCommand(frontmatterCommand)
 program.addCommand(vaultCommand)
 program.addCommand(folderCommand)
 
+process.on('SIGINT', () => process.exit(130))
+process.on('SIGTERM', () => process.exit(143))
+
 program.parseAsync(process.argv).catch((error) => {
   process.stderr.write(`Error: ${error.message}\n`)
   process.exit(1)

@@ -58,8 +58,7 @@ function sanitizeWindowState(parsed: Partial<WindowState>): WindowState {
   const state: WindowState = {
     x: typeof parsed.x === 'number' ? parsed.x : DEFAULTS.x,
     y: typeof parsed.y === 'number' ? parsed.y : DEFAULTS.y,
-    width:
-      typeof parsed.width === 'number' && parsed.width >= 400 ? parsed.width : DEFAULTS.width,
+    width: typeof parsed.width === 'number' && parsed.width >= 400 ? parsed.width : DEFAULTS.width,
     height:
       typeof parsed.height === 'number' && parsed.height >= 300 ? parsed.height : DEFAULTS.height,
     isMaximized:
@@ -108,8 +107,10 @@ export function loadAllWindowStates(): Record<string, WindowState> {
       const parsed = JSON.parse(raw) as Partial<StoredMultiWindowState>
 
       if (parsed.windows && typeof parsed.windows === 'object') {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
         const result: Record<string, WindowState> = {}
         for (const [id, state] of Object.entries(parsed.windows)) {
+          if (id !== 'main' && !UUID_RE.test(id)) continue
           if (state && typeof state === 'object') {
             result[id] = sanitizeWindowState(state as Partial<WindowState>)
           }

@@ -46,6 +46,10 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'create_note') {
+        if (!useNotesStore.getState().config.vaultPath) {
+          void pickVault()
+          return
+        }
         void (async () => {
           const createdPath = await createNote('Inbox')
           if (!createdPath) return
@@ -59,6 +63,8 @@ function App(): React.JSX.Element {
         const pane = panesState.getFocusedPane()
         if (pane?.activeTabId) {
           panesState.requestCloseTab(pane.id, pane.activeTabId)
+        } else {
+          void window.windowControls.close()
         }
         return
       }
@@ -154,6 +160,26 @@ function App(): React.JSX.Element {
     void initializeNotes()
   }, [initializeNotes])
 
+  useEffect(() => {
+    return window.menuEvents.onTriggerPickVault(() => {
+      void pickVault()
+    })
+  }, [pickVault])
+
+  useEffect(() => {
+    return window.menuEvents.onTriggerCreateNote(() => {
+      if (!useNotesStore.getState().config.vaultPath) {
+        void pickVault()
+        return
+      }
+      void (async () => {
+        const createdPath = await createNote('Inbox')
+        if (!createdPath) return
+        usePanesStore.getState().requestEditorFocus()
+      })()
+    })
+  }, [createNote, pickVault])
+
   // Detached window: fetch init data and open the tab
   useEffect(() => {
     if (!IS_DETACHED_WINDOW) return
@@ -197,61 +223,67 @@ function App(): React.JSX.Element {
     }
   }, [dispatchShortcutAction])
 
-  const sidebarContent = IS_DETACHED_WINDOW
-    ? undefined
-    : location.pathname.startsWith('/settings')
-      ? <SettingsSidebarNav />
-      : <NotesSidebar />
+  const sidebarContent = IS_DETACHED_WINDOW ? undefined : location.pathname.startsWith(
+      '/settings'
+    ) ? (
+    <SettingsSidebarNav />
+  ) : (
+    <NotesSidebar />
+  )
 
   return (
     <DndProvider backend={HTML5Backend}>
-    <AppShell sidebarContent={sidebarContent} onOpenSearch={() => setIsSearchOpen(true)} isGhostMode={isGhostMode}>
-      {IS_DETACHED_WINDOW ? (
-        <HomePage />
-      ) : (
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route
-            path="/settings"
-            element={<Navigate to={getSettingsSectionPath(DEFAULT_SETTINGS_SECTION_ID)} replace />}
-          />
-          <Route
-            path={getSettingsSectionPath('appearance')}
-            element={
-              <SettingsPage
-                section="appearance"
-                bindings={shortcutBindings}
-                isShortcutsLoading={isShortcutsLoading}
-              />
-            }
-          />
-          <Route
-            path={getSettingsSectionPath('keyboard-shortcuts')}
-            element={
-              <SettingsPage
-                section="keyboard-shortcuts"
-                bindings={shortcutBindings}
-                isShortcutsLoading={isShortcutsLoading}
-              />
-            }
-          />
-          <Route
-            path={getSettingsSectionPath('ghost-mode')}
-            element={
-              <SettingsPage
-                section="ghost-mode"
-                bindings={shortcutBindings}
-                isShortcutsLoading={isShortcutsLoading}
-              />
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      )}
-    </AppShell>
-    {isSearchOpen && (
-      <SearchPalette onClose={() => setIsSearchOpen(false)} />
-    )}
+      <AppShell
+        sidebarContent={sidebarContent}
+        onOpenSearch={() => setIsSearchOpen(true)}
+        isGhostMode={isGhostMode}
+      >
+        {IS_DETACHED_WINDOW ? (
+          <HomePage />
+        ) : (
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route
+              path="/settings"
+              element={
+                <Navigate to={getSettingsSectionPath(DEFAULT_SETTINGS_SECTION_ID)} replace />
+              }
+            />
+            <Route
+              path={getSettingsSectionPath('appearance')}
+              element={
+                <SettingsPage
+                  section="appearance"
+                  bindings={shortcutBindings}
+                  isShortcutsLoading={isShortcutsLoading}
+                />
+              }
+            />
+            <Route
+              path={getSettingsSectionPath('keyboard-shortcuts')}
+              element={
+                <SettingsPage
+                  section="keyboard-shortcuts"
+                  bindings={shortcutBindings}
+                  isShortcutsLoading={isShortcutsLoading}
+                />
+              }
+            />
+            <Route
+              path={getSettingsSectionPath('ghost-mode')}
+              element={
+                <SettingsPage
+                  section="ghost-mode"
+                  bindings={shortcutBindings}
+                  isShortcutsLoading={isShortcutsLoading}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
+      </AppShell>
+      {isSearchOpen && <SearchPalette onClose={() => setIsSearchOpen(false)} />}
     </DndProvider>
   )
 }

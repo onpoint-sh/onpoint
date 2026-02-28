@@ -1,0 +1,61 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Header from '../components/Header'
+import HeroSection from '../components/HeroSection'
+import FeaturesSection from '../components/FeaturesSection'
+import FAQSection from '../components/FAQSection'
+import CTASection from '../components/CTASection.astro'
+import Footer from '../components/Footer.astro'
+import { FAQ_ITEMS } from '../data/faq'
+import { SITE } from '../data/site'
+---
+
+<BaseLayout title={`${SITE.name} - The modern notes app for power users`}>
+  <Fragment slot="head">
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: SITE.name,
+        url: SITE.url
+      })}
+    />
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: SITE.name,
+        operatingSystem: 'macOS, Windows, Linux',
+        applicationCategory: 'DeveloperApplication',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        description: SITE.description,
+        url: SITE.url
+      })}
+    />
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: FAQ_ITEMS.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: { '@type': 'Answer', text: item.answer }
+        }))
+      })}
+    />
+  </Fragment>
+
+  <Header client:load />
+
+  <main class="flex flex-col">
+    <HeroSection client:only="react" />
+    <FeaturesSection client:visible />
+<FAQSection client:visible />
+    <CTASection />
+  </main>
+
+  <Footer />
+</BaseLayout>

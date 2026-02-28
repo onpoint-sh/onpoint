@@ -1,0 +1,16 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Header from '../components/Header'
+import Footer from '../components/Footer.astro'
+import DownloadPage from '../components/DownloadPage'
+---
+
+<BaseLayout title="Download ONPOINT" description="Download ONPOINT for macOS, Windows, and Linux.">
+  <Header client:load />
+
+  <main>
+    <DownloadPage client:load />
+  </main>
+
+  <Footer />
+</BaseLayout>

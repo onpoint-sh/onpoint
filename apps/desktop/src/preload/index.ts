@@ -90,8 +90,7 @@ const windowControls = {
       relativePath: string
     } | null>,
   newWindow: () => ipcRenderer.invoke(WINDOW_IPC_CHANNELS.newWindow) as Promise<void>,
-  getWindowId: () =>
-    ipcRenderer.invoke(WINDOW_IPC_CHANNELS.getWindowId) as Promise<string | null>
+  getWindowId: () => ipcRenderer.invoke(WINDOW_IPC_CHANNELS.getWindowId) as Promise<string | null>
 }
 
 const shortcuts = {
@@ -172,7 +171,11 @@ const notes = {
   openNote: (relativePath: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.open, relativePath) as Promise<NoteDocument>,
   createNote: (input?: CreateNoteInput, parentRelativePath?: string) =>
-    ipcRenderer.invoke(NOTES_IPC_CHANNELS.create, input, parentRelativePath) as Promise<NoteDocument>,
+    ipcRenderer.invoke(
+      NOTES_IPC_CHANNELS.create,
+      input,
+      parentRelativePath
+    ) as Promise<NoteDocument>,
   saveNote: (relativePath: string, content: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.save, relativePath, content) as Promise<SaveNoteResult>,
   saveNoteAs: (content: string) =>
@@ -190,38 +193,54 @@ const notes = {
   moveNote: (fromPath: string, toPath: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.move, fromPath, toPath) as Promise<MoveNoteResult>,
   createFolder: (relativePath: string) =>
-    ipcRenderer.invoke(NOTES_IPC_CHANNELS.createFolder, relativePath) as Promise<CreateFolderResult>,
+    ipcRenderer.invoke(
+      NOTES_IPC_CHANNELS.createFolder,
+      relativePath
+    ) as Promise<CreateFolderResult>,
   renameFolder: (fromPath: string, toPath: string) =>
-    ipcRenderer.invoke(NOTES_IPC_CHANNELS.renameFolder, fromPath, toPath) as Promise<RenameFolderResult>,
+    ipcRenderer.invoke(
+      NOTES_IPC_CHANNELS.renameFolder,
+      fromPath,
+      toPath
+    ) as Promise<RenameFolderResult>,
   searchContent: (query: string) =>
-    ipcRenderer.invoke(NOTES_IPC_CHANNELS.searchContent, query) as Promise<SearchContentMatch[]>
+    ipcRenderer.invoke(NOTES_IPC_CHANNELS.searchContent, query) as Promise<SearchContentMatch[]>,
+  listFolders: () => ipcRenderer.invoke(NOTES_IPC_CHANNELS.listFolders) as Promise<string[]>
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('windowControls', windowControls)
-    contextBridge.exposeInMainWorld('shortcuts', shortcuts)
-    contextBridge.exposeInMainWorld('notes', notes)
-    contextBridge.exposeInMainWorld('ghostMode', ghostMode)
-    contextBridge.exposeInMainWorld('contextMenu', contextMenu)
-  } catch (error) {
-    console.error(error)
+const menuEvents = {
+  onTriggerPickVault: (callback: () => void): (() => void) => {
+    const listener = (): void => {
+      callback()
+    }
+
+    ipcRenderer.on('menu:trigger-pick-vault', listener)
+
+    return () => {
+      ipcRenderer.removeListener('menu:trigger-pick-vault', listener)
+    }
+  },
+  onTriggerCreateNote: (callback: () => void): (() => void) => {
+    const listener = (): void => {
+      callback()
+    }
+
+    ipcRenderer.on('menu:trigger-create-note', listener)
+
+    return () => {
+      ipcRenderer.removeListener('menu:trigger-create-note', listener)
+    }
   }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.windowControls = windowControls
-  // @ts-ignore (define in dts)
-  window.shortcuts = shortcuts
-  // @ts-ignore (define in dts)
-  window.notes = notes
-  // @ts-ignore (define in dts)
-  window.ghostMode = ghostMode
-  // @ts-ignore (define in dts)
-  window.contextMenu = contextMenu
+}
+
+try {
+  contextBridge.exposeInMainWorld('electron', electronAPI)
+  contextBridge.exposeInMainWorld('windowControls', windowControls)
+  contextBridge.exposeInMainWorld('shortcuts', shortcuts)
+  contextBridge.exposeInMainWorld('notes', notes)
+  contextBridge.exposeInMainWorld('ghostMode', ghostMode)
+  contextBridge.exposeInMainWorld('contextMenu', contextMenu)
+  contextBridge.exposeInMainWorld('menuEvents', menuEvents)
+} catch (error) {
+  console.error(error)
 }
