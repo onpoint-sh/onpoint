@@ -114,6 +114,13 @@ function PlatformCard({
           <a
             key={option.href}
             href={option.href}
+            onClick={() => {
+              window.posthog?.capture('download_started', {
+                platform: section.platform,
+                label: option.label,
+                arch: option.arch
+              })
+            }}
             className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-all hover:bg-foreground/5 ${
               option.recommended && isDetected ? 'border-primary/30 bg-primary/5' : 'border-border'
             }`}

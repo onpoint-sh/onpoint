@@ -49,6 +49,11 @@ export default function FAQSection(): React.JSX.Element {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   const handleToggle = (index: number): void => {
+    if (openIndex !== index) {
+      window.posthog?.capture('faq_question_opened', {
+        question: FAQ_ITEMS[index].question
+      })
+    }
     setOpenIndex(openIndex === index ? null : index)
   }
 

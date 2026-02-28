@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --port 4000",
-    "build": "astro build",
+    "build": "PUBLIC_POSTHOG_ENABLED=true astro build",
     "preview": "astro preview",
     "typecheck": "astro check && tsc --noEmit"
   },

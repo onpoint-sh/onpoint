@@ -69,9 +69,9 @@ export default function HeroSection(): React.JSX.Element {
     <div className="flex flex-col items-center pt-12 sm:pt-16 lg:pt-20">
       <div className="mx-auto w-full max-w-[1600px] px-4 sm:px-8 lg:px-[30px]">
         <div className="flex flex-col items-center text-center">
-          <h1 className="text-4xl font-medium tracking-tight leading-[1.1] text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
-            The Notes App for{' '}
-            <span className="inline-block text-left" style={{ minWidth: '7.5em' }}>
+          <h1 className="mx-auto text-4xl font-medium tracking-tight leading-[1.1] text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
+            <span className="block">The Notes App for</span>
+            <span className="inline-block text-center" style={{ minWidth: '7.5em' }}>
               <RotatingTypewriter
                 words={[
                   'AI Agents.',
@@ -100,6 +100,11 @@ export default function HeroSection(): React.JSX.Element {
               href="https://github.com/onpoint-sh/onpoint"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => {
+                window.posthog?.capture('github_link_clicked', {
+                  location: 'hero'
+                })
+              }}
               className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border bg-background px-6 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:h-11 sm:px-8"
             >
               <svg className="size-5" viewBox="0 0 24 24" fill="currentColor">

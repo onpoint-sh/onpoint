@@ -57,6 +57,11 @@ export default function DownloadButton({
     <div className="flex flex-col items-center gap-2">
       <a
         href={info.href}
+        onClick={() => {
+          window.posthog?.capture('download_button_clicked', {
+            platform: info.platform
+          })
+        }}
         className={`inline-flex items-center justify-center whitespace-nowrap rounded-md font-medium transition-all bg-primary text-primary-foreground hover:bg-primary/90 ${sizeClasses} ${className}`}
       >
         <Download className="size-5" />

@@ -52,6 +52,17 @@ function FeatureItem({
   const isReversed = index % 2 === 1
   const DemoComponent = FEATURE_DEMOS[feature.tag]
   const [ref, isVisible] = useInView({ rootMargin: '-100px' })
+  const tracked = useRef(false)
+
+  useEffect(() => {
+    if (isVisible && !tracked.current) {
+      tracked.current = true
+      window.posthog?.capture('feature_viewed', {
+        feature: feature.tag,
+        title: feature.title
+      })
+    }
+  }, [isVisible, feature.tag, feature.title])
 
   return (
     <div
