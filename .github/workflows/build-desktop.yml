@@ -1,0 +1,164 @@
+name: Build Desktop
+
+on:
+  workflow_call:
+    inputs:
+      artifact_prefix:
+        description: 'Prefix for artifact names'
+        required: false
+        type: string
+        default: 'desktop'
+      artifact_retention_days:
+        description: 'Number of days to retain artifacts'
+        required: false
+        type: number
+        default: 30
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build the CLI binary (bundled into the desktop app)
+      - name: Build CLI
+        run: pnpm --filter @onpoint/cli build:sea
+
+      # --- macOS Code Signing (uncomment when ready) ---
+      # - name: Import code signing certificate
+      #   uses: apple-actions/import-codesign-certs@v2
+      #   with:
+      #     p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+      #     p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Build Electron app
+        working-directory: apps/desktop
+        run: |
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --mac --arm64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- macOS Notarization (uncomment when ready) ---
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-macos-dmg
+          path: apps/desktop/dist/*.dmg
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+      - name: Upload macOS ZIP (for auto-update)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-macos-zip
+          path: apps/desktop/dist/*.zip
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+      - name: Upload macOS update manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-macos-manifest
+          path: apps/desktop/dist/latest-mac.yml
+          retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: ignore
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build CLI
+        run: pnpm --filter @onpoint/cli build:sea
+
+      - name: Build Electron app
+        working-directory: apps/desktop
+        run: |
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --win --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # --- Windows Code Signing (uncomment when ready) ---
+          # CSC_LINK: ${{ secrets.WIN_CERTIFICATE }}
+          # CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-windows-exe
+          path: apps/desktop/dist/*.exe
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+      - name: Upload Windows update manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-windows-manifest
+          path: apps/desktop/dist/latest.yml
+          retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: ignore
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build CLI
+        run: pnpm --filter @onpoint/cli build:sea
+
+      - name: Build Electron app
+        working-directory: apps/desktop
+        run: |
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --linux AppImage --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-linux-appimage
+          path: apps/desktop/dist/*.AppImage
+          retention-days: ${{ inputs.artifact_retention_days }}
+
+      - name: Upload Linux update manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_prefix }}-linux-manifest
+          path: apps/desktop/dist/latest-linux.yml
+          retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: ignore

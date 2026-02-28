@@ -3,7 +3,6 @@ export interface Feature {
   title: string
   description: string
   colors: [string, string]
-  media?: string
 }
 
 export const FEATURES: Feature[] = [
@@ -19,8 +18,7 @@ export const FEATURES: Feature[] = [
     title: 'Write notes at the speed of thought',
     description:
       'A distraction-free editor that gets out of your way. Markdown-native with keyboard shortcuts you already know. Just open and start typing.',
-    colors: ['#06b6d4', '#3b82f6'],
-    media: '/markdown.mov'
+    colors: ['#06b6d4', '#3b82f6']
   },
   {
     tag: 'Organize',

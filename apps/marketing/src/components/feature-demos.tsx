@@ -32,7 +32,12 @@ function DesktopShell({
   return (
     <div className="overflow-hidden rounded-xl border border-border">
       <div className="relative" style={{ height: CARD_HEIGHT }}>
-        <img src={wallpaper} alt="" className="absolute inset-0 size-full object-cover" />
+        <img
+          src={wallpaper}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 size-full object-cover"
+        />
         <div
           className={`absolute inset-0 flex justify-center p-6 sm:p-8 ${stretch ? 'items-stretch' : 'items-center'}`}
         >
@@ -182,7 +187,7 @@ function SidebarWindow({
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-hidden">{children}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
       <div className="shrink-0 border-t p-1" style={{ borderColor: 'var(--border)' }}>
         <div
           className="flex items-center gap-2 rounded-md px-2 py-1 text-[0.72rem]"
@@ -526,7 +531,7 @@ function InteractiveSearch(): React.JSX.Element {
 
 export function PresentDemo(): React.JSX.Element {
   return (
-    <DesktopShell wallpaper="/wallpaper-goldengate.jpg" stretch>
+    <DesktopShell wallpaper="/wallpaper-goldengate.webp" stretch>
       <AppWindow style={{ opacity: 0.7 }}>
         <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
           <div
@@ -719,7 +724,7 @@ What if we added a "focus mode" that dims everything except the current paragrap
 
 export function CaptureDemo(): React.JSX.Element {
   return (
-    <DesktopShell wallpaper="/wallpaper-cabin.jpg" stretch>
+    <DesktopShell wallpaper="/wallpaper-cabin.webp" stretch>
       <div
         className="w-full overflow-hidden rounded-lg border border-border/50 shadow-2xl"
         style={{ maxHeight: '100%' }}
@@ -826,9 +831,9 @@ export function OrganizeDemo(): React.JSX.Element {
   }, [])
 
   return (
-    <DesktopShell wallpaper="/wallpaper-leaves.jpg">
+    <DesktopShell wallpaper="/wallpaper-leaves.webp" stretch>
       <SidebarWindow onAddFile={addFile} onAddFolder={addFolder}>
-        <div className="overflow-y-auto overflow-x-hidden">
+        <div className="h-full overflow-y-auto overflow-x-hidden">
           {tree.map((item) => (
             <InteractiveTreeNode
               key={item.id}
@@ -849,7 +854,7 @@ export function OrganizeDemo(): React.JSX.Element {
 
 export function SearchDemo(): React.JSX.Element {
   return (
-    <DesktopShell wallpaper="/wallpaper-blobs.jpg">
+    <DesktopShell wallpaper="/wallpaper-blobs.webp">
       <InteractiveSearch />
     </DesktopShell>
   )
@@ -1153,7 +1158,7 @@ export function CLIDemo(): React.JSX.Element {
   }, [input])
 
   return (
-    <DesktopShell wallpaper="/wallpaper-wave.jpg">
+    <DesktopShell wallpaper="/wallpaper-wave.webp">
       <div
         className="flex w-full flex-col overflow-hidden rounded-lg border border-border/50 font-mono shadow-2xl"
         style={{ background: 'var(--card)', maxHeight: '100%' }}
@@ -1301,8 +1306,9 @@ export function CrossPlatformDemo(): React.JSX.Element {
           style={themeVars}
         >
           <img
-            src="/wallpaper-swirl.jpg"
+            src="/wallpaper-swirl.webp"
             alt=""
+            loading="lazy"
             className="absolute inset-0 size-full object-cover"
           />
           <div

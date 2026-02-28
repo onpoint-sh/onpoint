@@ -69,7 +69,6 @@ import { minDark } from './min-dark'
 import { minLight } from './min-light'
 import { auraDark } from './aura-dark'
 import { bear } from './bear'
-import { discord } from './discord'
 import { nightOwlLight } from './night-owl-light'
 
 export const THEMES: readonly ThemeDefinition[] = [
@@ -83,7 +82,6 @@ export const THEMES: readonly ThemeDefinition[] = [
   minLight,
   auraDark,
   bear,
-  discord,
   nightOwlLight
 ]
 
@@ -101,8 +99,7 @@ export function resolveTheme(
   const resolvedMode =
     preferences.mode === 'auto' ? (systemIsDark ? 'dark' : 'light') : preferences.mode
 
-  const themeId =
-    resolvedMode === 'dark' ? preferences.darkThemeId : preferences.lightThemeId
+  const themeId = resolvedMode === 'dark' ? preferences.darkThemeId : preferences.lightThemeId
 
   return getThemeById(themeId) ?? (resolvedMode === 'dark' ? defaultDark : defaultLight)
 }

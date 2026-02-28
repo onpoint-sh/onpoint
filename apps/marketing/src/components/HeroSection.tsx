@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppPreview, AppPreviewProvider } from '@onpoint/app-preview'
 import '@onpoint/app-preview/styles/app-preview.css'
 import DownloadButton from './DownloadButton'
@@ -20,17 +19,51 @@ function useResponsiveHeight(): number {
   return height
 }
 
+function useScrollParallax(ref: React.RefObject<HTMLDivElement | null>): {
+  scale: number
+  opacity: number
+} {
+  const [values, setValues] = useState({ scale: 1, opacity: 1 })
+  const rafId = useRef(0)
+
+  const update = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+
+    const rect = el.getBoundingClientRect()
+    const viewportH = window.innerHeight
+
+    const start = viewportH * 0.45
+    const end = 0
+    const progress = Math.min(1, Math.max(0, (start - rect.top) / (start - end)))
+
+    setValues({
+      scale: 1 - progress * 0.05,
+      opacity: 1 - progress * 0.15
+    })
+  }, [ref])
+
+  useEffect(() => {
+    const onScroll = (): void => {
+      cancelAnimationFrame(rafId.current)
+      rafId.current = requestAnimationFrame(update)
+    }
+
+    update()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(rafId.current)
+    }
+  }, [update])
+
+  return values
+}
+
 export default function HeroSection(): React.JSX.Element {
   const demoRef = useRef<HTMLDivElement>(null)
   const previewHeight = useResponsiveHeight()
-
-  const { scrollYProgress } = useScroll({
-    target: demoRef,
-    offset: ['start 0.45', 'start 0']
-  })
-
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 0.95])
-  const opacity = useTransform(scrollYProgress, [0, 1], [1, 0.85])
+  const { scale, opacity } = useScrollParallax(demoRef)
 
   return (
     <div className="flex flex-col items-center pt-12 sm:pt-16 lg:pt-20">
@@ -77,15 +110,15 @@ export default function HeroSection(): React.JSX.Element {
           </div>
         </div>
 
-        <motion.div
+        <div
           ref={demoRef}
-          className="relative mt-12 w-full px-4 pb-12 sm:mt-16 sm:px-6 lg:mt-20 lg:px-8"
-          style={{ scale, opacity }}
+          className="relative mt-12 w-full px-4 pb-12 sm:mt-16 sm:px-6 lg:mt-20 lg:px-8 will-change-transform"
+          style={{ transform: `scale(${scale})`, opacity }}
         >
           <AppPreviewProvider notes={MOCK_NOTES}>
             <AppPreview height={previewHeight} defaultNote="Sales/Q1 Pipeline Review.md" />
           </AppPreviewProvider>
-        </motion.div>
+        </div>
       </div>
     </div>
   )

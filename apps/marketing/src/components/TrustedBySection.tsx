@@ -1,5 +1,3 @@
-import Marquee from 'react-fast-marquee'
-
 const LOGOS = [
   { name: 'Vercel', width: 100 },
   { name: 'Stripe', width: 80 },
@@ -18,21 +16,21 @@ export default function TrustedBySection(): React.JSX.Element {
         </p>
       </div>
 
-      <div className="relative">
+      <div className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-32 bg-gradient-to-r from-background to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-32 bg-gradient-to-l from-background to-transparent" />
 
-        <Marquee speed={40} gradient={false} pauseOnHover>
-          {LOGOS.map((logo) => (
+        <div className="flex w-max animate-marquee hover:[animation-play-state:paused]">
+          {[...LOGOS, ...LOGOS].map((logo, i) => (
             <div
-              key={logo.name}
+              key={`${logo.name}-${i}`}
               className="mx-12 flex items-center justify-center"
               style={{ minWidth: logo.width }}
             >
               <span className="text-lg font-medium text-muted-foreground/50">{logo.name}</span>
             </div>
           ))}
-        </Marquee>
+        </div>
       </div>
     </section>
   )

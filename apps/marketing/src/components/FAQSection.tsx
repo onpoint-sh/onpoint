@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
 import { Plus } from 'lucide-react'
 import type { FAQItem } from '../data/faq'
 import { FAQ_ITEMS } from '../data/faq'
@@ -29,21 +28,19 @@ function FAQAccordionItem({
           }`}
         />
       </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <p className="pb-6 pr-12 text-base leading-relaxed text-muted-foreground">
-              {item.answer}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div
+        className="grid transition-[grid-template-rows,opacity] duration-200 ease-in-out"
+        style={{
+          gridTemplateRows: isOpen ? '1fr' : '0fr',
+          opacity: isOpen ? 1 : 0
+        }}
+      >
+        <div className="overflow-hidden">
+          <p className="pb-6 pr-12 text-base leading-relaxed text-muted-foreground">
+            {item.answer}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
