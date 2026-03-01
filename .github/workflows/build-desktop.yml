@@ -17,6 +17,7 @@ on:
 jobs:
   build-macos:
     runs-on: macos-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -31,28 +32,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Build the CLI binary (bundled into the desktop app)
       - name: Build CLI
         run: pnpm --filter @onpoint/cli build:sea
-
-      # --- macOS Code Signing (uncomment when ready) ---
-      # - name: Import code signing certificate
-      #   uses: apple-actions/import-codesign-certs@v2
-      #   with:
-      #     p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-      #     p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       - name: Build Electron app
         working-directory: apps/desktop
         run: |
           pnpm exec electron-vite build
-          pnpm exec electron-builder --mac --arm64 --publish never
+          pnpm exec electron-builder --mac --arm64 --publish never -c.mac.notarize=true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # --- macOS Notarization (uncomment when ready) ---
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify app bundle
+        working-directory: apps/desktop
+        run: |
+          APP_DIR=$(ls -d dist/mac-arm64/*.app | head -1)
+          test -d "$APP_DIR" || { echo "::error::.app bundle not found"; exit 1; }
+          test -f "$APP_DIR/Contents/Resources/app-update.yml" || echo "::warning::app-update.yml missing — auto-update may not work"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
@@ -60,6 +60,7 @@ jobs:
           name: ${{ inputs.artifact_prefix }}-macos-dmg
           path: apps/desktop/dist/*.dmg
           retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: error
 
       - name: Upload macOS ZIP (for auto-update)
         uses: actions/upload-artifact@v4
@@ -67,6 +68,7 @@ jobs:
           name: ${{ inputs.artifact_prefix }}-macos-zip
           path: apps/desktop/dist/*.zip
           retention-days: ${{ inputs.artifact_retention_days }}
+          if-no-files-found: error
 
       - name: Upload macOS update manifest
         uses: actions/upload-artifact@v4

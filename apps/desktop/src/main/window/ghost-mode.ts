@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, ipcMain } from 'electron'
+import { app, Menu, type BrowserWindow, ipcMain } from 'electron'
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
 import {
@@ -10,13 +10,15 @@ import {
 } from '@onpoint/shared/ghost-mode'
 
 type GhostModeServiceOptions = {
-  getWindow: () => BrowserWindow | undefined
+  getWindows: () => BrowserWindow[]
+  onRestoreMenu: () => void
 }
 
 type GhostModeService = {
   initialize: () => Promise<void>
   toggle: () => void
   isActive: () => boolean
+  applyToWindow: (window: BrowserWindow) => void
   dispose: () => void
 }
 
@@ -54,10 +56,16 @@ async function saveConfig(config: GhostModeConfig): Promise<void> {
 }
 
 function clampOpacity(value: number): number {
-  return Math.round(Math.max(GHOST_MODE_OPACITY_MIN, Math.min(GHOST_MODE_OPACITY_MAX, value)) * 100) / 100
+  return (
+    Math.round(Math.max(GHOST_MODE_OPACITY_MIN, Math.min(GHOST_MODE_OPACITY_MAX, value)) * 100) /
+    100
+  )
 }
 
-function createGhostModeService({ getWindow }: GhostModeServiceOptions): GhostModeService {
+function createGhostModeService({
+  getWindows,
+  onRestoreMenu
+}: GhostModeServiceOptions): GhostModeService {
   let active = false
   let config: GhostModeConfig = { ...DEFAULT_GHOST_MODE_CONFIG }
 
@@ -65,15 +73,18 @@ function createGhostModeService({ getWindow }: GhostModeServiceOptions): GhostMo
     config = await loadConfig()
   }
 
-  function applyState(window: BrowserWindow, enable: boolean): void {
+  function applyWindowState(window: BrowserWindow, enable: boolean): void {
+    if (window.isDestroyed()) return
     window.setContentProtection(enable)
     window.setAlwaysOnTop(enable, enable ? 'screen-saver' : 'normal')
     window.setOpacity(enable ? config.opacity : 1.0)
     window.setVisibleOnAllWorkspaces(enable)
     window.setSkipTaskbar(enable)
+    window.setTitle(' ')
+  }
 
-    // On macOS, setSkipTaskbar is a no-op — the dock icon is per-app, not per-window.
-    // Use app.dock.hide()/show() to toggle dock visibility.
+  function applyGlobalState(enable: boolean): void {
+    // Hide/show dock icon on macOS
     if (app.dock) {
       if (enable) {
         app.dock.hide()
@@ -81,15 +92,32 @@ function createGhostModeService({ getWindow }: GhostModeServiceOptions): GhostMo
         void app.dock.show()
       }
     }
+
+    // Hide/restore menu bar — removes "Onpoint" from the top-left
+    if (enable) {
+      Menu.setApplicationMenu(null)
+    } else {
+      onRestoreMenu()
+    }
+  }
+
+  function applyToWindow(window: BrowserWindow): void {
+    if (active) {
+      applyWindowState(window, true)
+    }
   }
 
   function toggle(): void {
-    const window = getWindow()
-    if (!window || window.isDestroyed()) return
+    const windows = getWindows()
+    if (windows.length === 0) return
 
     active = !active
-    applyState(window, active)
-    window.webContents.send(GHOST_MODE_IPC_CHANNELS.stateChanged, active)
+
+    applyGlobalState(active)
+    for (const window of windows) {
+      applyWindowState(window, active)
+      window.webContents.send(GHOST_MODE_IPC_CHANNELS.stateChanged, active)
+    }
   }
 
   function isActive(): boolean {
@@ -107,9 +135,10 @@ function createGhostModeService({ getWindow }: GhostModeServiceOptions): GhostMo
       await saveConfig(config)
 
       // Apply immediately if ghost mode is active
-      const window = getWindow()
-      if (active && window && !window.isDestroyed()) {
-        window.setOpacity(config.opacity)
+      if (active) {
+        for (const window of getWindows()) {
+          window.setOpacity(config.opacity)
+        }
       }
 
       return { ...config }
@@ -117,10 +146,12 @@ function createGhostModeService({ getWindow }: GhostModeServiceOptions): GhostMo
   )
 
   function dispose(): void {
-    const window = getWindow()
-    if (window && !window.isDestroyed() && active) {
+    if (active) {
       active = false
-      applyState(window, false)
+      applyGlobalState(false)
+      for (const window of getWindows()) {
+        applyWindowState(window, false)
+      }
     }
 
     ipcMain.removeHandler(GHOST_MODE_IPC_CHANNELS.getState)
@@ -128,7 +159,7 @@ function createGhostModeService({ getWindow }: GhostModeServiceOptions): GhostMo
     ipcMain.removeHandler(GHOST_MODE_IPC_CHANNELS.setOpacity)
   }
 
-  return { initialize, toggle, isActive, dispose }
+  return { initialize, toggle, isActive, applyToWindow, dispose }
 }
 
 export { createGhostModeService }

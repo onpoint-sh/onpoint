@@ -5,7 +5,10 @@ type MenuOptions = {
   onNewWindow: () => void
 }
 
+let cachedOptions: MenuOptions | null = null
+
 export function setupApplicationMenu(options: MenuOptions): void {
+  cachedOptions = options
   const isMac = process.platform === 'darwin'
 
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -101,6 +104,24 @@ export function setupApplicationMenu(options: MenuOptions): void {
       ]
     },
     {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Developer Tools',
+          accelerator: isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+          click: (_menuItem, browserWindow): void => {
+            const window =
+              browserWindow instanceof BrowserWindow
+                ? browserWindow
+                : BrowserWindow.getAllWindows()[0]
+            if (window && !window.isDestroyed()) {
+              window.webContents.toggleDevTools()
+            }
+          }
+        }
+      ]
+    },
+    {
       label: 'Window',
       submenu: [
         { role: 'minimize' },
@@ -114,4 +135,10 @@ export function setupApplicationMenu(options: MenuOptions): void {
 
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
+}
+
+export function restoreApplicationMenu(): void {
+  if (cachedOptions) {
+    setupApplicationMenu(cachedOptions)
+  }
 }

@@ -15,7 +15,7 @@ import {
 import { windowRegistry, createWindowId } from './window/window-registry'
 import { registerWindowControls } from './window/register-window-controls'
 import { registerContextMenu } from './window/context-menu'
-import { setupApplicationMenu } from './menu'
+import { setupApplicationMenu, restoreApplicationMenu } from './menu'
 import { createShortcutService } from './shortcuts'
 import { registerNotesIpc } from './notes/ipc'
 import { copyNotesConfig, deleteNotesConfig } from './notes/store'
@@ -25,6 +25,7 @@ type WindowTracker = { save: () => void; remove: () => void }
 const windowTrackers = new Map<string, WindowTracker>()
 
 let isQuitting = false
+let onWindowCreated: ((window: BrowserWindow) => void) | null = null
 
 function createAppWindow(
   windowId?: string,
@@ -54,6 +55,9 @@ function createAppWindow(
     windowTrackers.delete(id)
   })
 
+  // Apply ghost mode state to newly created windows
+  onWindowCreated?.(window)
+
   return window
 }
 
@@ -64,7 +68,7 @@ function createNewWindow(): BrowserWindow {
 app.whenReady().then(() => {
   const savedStates = loadAllWindowStates()
 
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('sh.onpoint.app')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window, { zoom: true })
@@ -138,10 +142,8 @@ app.whenReady().then(() => {
   const unregisterNotesIpc = registerNotesIpc()
 
   const ghostModeService = createGhostModeService({
-    getWindow: () => {
-      const allWindows = windowRegistry.getAllWindows()
-      return allWindows[0] && !allWindows[0].isDestroyed() ? allWindows[0] : undefined
-    }
+    getWindows: () => windowRegistry.getAllWindows(),
+    onRestoreMenu: restoreApplicationMenu
   })
 
   const shortcutService = createShortcutService({
@@ -167,8 +169,17 @@ app.whenReady().then(() => {
     }
   })
 
+  // Apply ghost mode to any window created after service init
+  onWindowCreated = (window) => ghostModeService.applyToWindow(window)
+
   void ghostModeService.initialize()
   void shortcutService.initialize()
+
+  // LSUIElement is true in Info.plist so the app starts without a dock icon.
+  // Show the dock icon on launch since ghost mode starts inactive.
+  if (app.dock) {
+    void app.dock.show()
+  }
 
   // Restore windows from saved state, or create a default "main" window
   const windowIds = Object.keys(savedStates)
@@ -182,6 +193,10 @@ app.whenReady().then(() => {
 
   app.on('activate', function () {
     if (windowRegistry.size() === 0) {
+      // Don't re-show dock if ghost mode is active
+      if (!ghostModeService.isActive() && app.dock) {
+        void app.dock.show()
+      }
       createAppWindow('main')
     }
   })

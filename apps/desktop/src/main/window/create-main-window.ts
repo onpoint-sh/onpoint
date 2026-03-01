@@ -78,6 +78,11 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     mainWindow.show()
   })
 
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    console.error(`Failed to load renderer: ${errorCode} ${errorDescription}`)
+    mainWindow.show()
+  })
+
   mainWindow.on('maximize', () => {
     emitMaximizeState(mainWindow)
   })

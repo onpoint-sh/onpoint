@@ -12,9 +12,15 @@ export default function Header(): React.JSX.Element {
         <div className="flex h-14 items-center justify-between">
           <a
             href="/"
-            className="text-foreground hover:text-foreground/80 transition-colors animate-fade-in"
+            className="flex items-center text-foreground hover:text-foreground/80 transition-colors animate-fade-in"
           >
-            <span className="text-lg font-semibold tracking-wide uppercase font-brand">
+            <img src="/logo.png" alt="ONPOINT" className="h-7 w-7 rounded-full dark:hidden" />
+            <img
+              src="/logo-dark.png"
+              alt="ONPOINT"
+              className="h-7 w-7 rounded-full hidden dark:block"
+            />
+            <span className="text-lg font-semibold tracking-wide uppercase font-brand ml-2">
               ONPOINT
             </span>
           </a>

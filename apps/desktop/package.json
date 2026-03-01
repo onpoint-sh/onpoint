@@ -18,7 +18,8 @@
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "pnpm run build && pnpm --filter @onpoint/cli build:sea && electron-builder --dir",
     "build:win": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --win",
-    "build:mac": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --mac",
+    "build:mac": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --mac -c.mac.notarize=false",
+    "build:mac:release": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --mac",
     "build:linux": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --linux"
   },
   "dependencies": {

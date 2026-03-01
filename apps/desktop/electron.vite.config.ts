@@ -15,15 +15,17 @@ export default defineConfig({
       // and @electron-toolkit (its require('electron') must resolve via Electron's
       // runtime module, not pnpm's npm stub)
       externalizeDeps: {
-        exclude: [
-          '@onpoint/notes-core',
-          '@onpoint/shared',
-          '@electron-toolkit/utils'
-        ]
+        exclude: ['@onpoint/notes-core', '@onpoint/shared', '@electron-toolkit/utils']
       }
     }
   },
-  preload: {},
+  preload: {
+    build: {
+      externalizeDeps: {
+        exclude: ['@electron-toolkit/preload', '@onpoint/shared']
+      }
+    }
+  },
   renderer: {
     resolve: {
       alias: {
