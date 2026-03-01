@@ -6,8 +6,7 @@ export interface FAQItem {
 export const FAQ_ITEMS: FAQItem[] = [
   {
     question: 'Is ONPOINT free?',
-    answer:
-      'Yes, ONPOINT is completely free and open source. Download it today for macOS, Windows, or Linux.'
+    answer: 'Yes, ONPOINT is completely free and open source. Download it today for macOS.'
   },
   {
     question: 'Does ONPOINT support Markdown?',
@@ -26,8 +25,7 @@ export const FAQ_ITEMS: FAQItem[] = [
   },
   {
     question: 'What platforms are supported?',
-    answer:
-      'ONPOINT is available on macOS (Intel & Apple Silicon), Windows, and Linux (AppImage, Snap, and .deb).'
+    answer: 'ONPOINT is available on macOS (Intel & Apple Silicon).'
   },
   {
     question: 'How is ONPOINT different from Obsidian or Notion?',
