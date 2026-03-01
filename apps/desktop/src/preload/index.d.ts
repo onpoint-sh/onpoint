@@ -24,6 +24,18 @@ import type {
   SaveNoteResult,
   SearchContentMatch
 } from '@onpoint/shared/notes'
+import type {
+  TerminalBellEvent,
+  TerminalCreateOptions,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalSessionChangedEvent,
+  TerminalSessionId,
+  TerminalSessionMetaPatch,
+  TerminalSessionSummary,
+  TerminalSettings,
+  TerminalTitleEvent
+} from '@onpoint/shared/terminal'
 
 type WindowControlsAPI = {
   platform: NodeJS.Platform
@@ -92,6 +104,27 @@ type NotesAPI = {
   listFolders: () => Promise<string[]>
 }
 
+type TerminalsAPI = {
+  createSession: (options?: TerminalCreateOptions) => Promise<TerminalSessionSummary>
+  listSessions: () => Promise<TerminalSessionSummary[]>
+  write: (sessionId: TerminalSessionId, data: string) => Promise<void>
+  resize: (sessionId: TerminalSessionId, cols: number, rows: number) => Promise<void>
+  kill: (sessionId: TerminalSessionId) => Promise<void>
+  clearBuffer: (sessionId: TerminalSessionId) => Promise<void>
+  readBuffer: (sessionId: TerminalSessionId) => Promise<string>
+  updateSessionMeta: (
+    sessionId: TerminalSessionId,
+    patch: TerminalSessionMetaPatch
+  ) => Promise<TerminalSessionSummary>
+  getSettings: () => Promise<TerminalSettings>
+  updateSettings: (patch: Partial<TerminalSettings>) => Promise<TerminalSettings>
+  onData: (callback: (event: TerminalDataEvent) => void) => () => void
+  onExit: (callback: (event: TerminalExitEvent) => void) => () => void
+  onTitle: (callback: (event: TerminalTitleEvent) => void) => () => void
+  onBell: (callback: (event: TerminalBellEvent) => void) => () => void
+  onSessionChanged: (callback: (event: TerminalSessionChangedEvent) => void) => () => void
+}
+
 type ContextMenuItem = {
   id: string
   label: string
@@ -116,6 +149,7 @@ declare global {
     windowControls: WindowControlsAPI
     shortcuts: ShortcutsAPI
     notes: NotesAPI
+    terminals: TerminalsAPI
     ghostMode: GhostModeAPI
     contextMenu: ContextMenuAPI
     menuEvents: MenuEventsAPI

@@ -67,7 +67,7 @@ function ResizableSidebar({
 
   return (
     <aside
-      className="relative h-full shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+      className="relative h-full shrink-0 bg-sidebar text-sidebar-foreground"
       style={{ width }}
     >
       <div className="flex h-full flex-col overflow-hidden p-3">{children}</div>

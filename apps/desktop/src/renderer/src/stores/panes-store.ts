@@ -243,7 +243,14 @@ export const usePanesStore = create<PanesStoreState>()(
         tabId: string
       ) => {
         const state = get()
-        const fromPane = state.panes[fromPaneId]
+        const resolvedFromPaneId = state.panes[fromPaneId]?.tabs.some((t) => t.id === tabId)
+          ? fromPaneId
+          : (Object.entries(state.panes).find(([, pane]) =>
+              pane.tabs.some((candidate) => candidate.id === tabId)
+            )?.[0] ?? null)
+        if (!resolvedFromPaneId) return
+
+        const fromPane = state.panes[resolvedFromPaneId]
         if (!fromPane) return
 
         const tab = fromPane.tabs.find((t) => t.id === tabId)
@@ -282,11 +289,11 @@ export const usePanesStore = create<PanesStoreState>()(
 
         // Remove tab from source pane (skip if it's the last tab in the
         // same pane we just split — removing it would collapse the split)
-        if (!(fromPaneId === targetPaneId && fromPane.tabs.length === 1)) {
+        if (!(resolvedFromPaneId === targetPaneId && fromPane.tabs.length === 1)) {
           const fromTabs = fromPane.tabs.filter((t) => t.id !== tabId)
           if (fromTabs.length === 0) {
-            delete newPanes[fromPaneId]
-            newLayout = removePaneFromLayout(newLayout, fromPaneId) ?? newLayout
+            delete newPanes[resolvedFromPaneId]
+            newLayout = removePaneFromLayout(newLayout, resolvedFromPaneId) ?? newLayout
           } else {
             const fromIndex = fromPane.tabs.findIndex((t) => t.id === tabId)
             const fromActiveTabId =
@@ -294,7 +301,7 @@ export const usePanesStore = create<PanesStoreState>()(
                 ? pickNextActiveTab(fromTabs, fromIndex)
                 : fromPane.activeTabId
 
-            newPanes[fromPaneId] = {
+            newPanes[resolvedFromPaneId] = {
               ...fromPane,
               tabs: fromTabs,
               activeTabId: fromActiveTabId
@@ -604,7 +611,14 @@ export const usePanesStore = create<PanesStoreState>()(
 
       moveTabToPane: (fromPaneId: string, tabId: string, toPaneId: string) => {
         const state = get()
-        const fromPane = state.panes[fromPaneId]
+        const resolvedFromPaneId = state.panes[fromPaneId]?.tabs.some((t) => t.id === tabId)
+          ? fromPaneId
+          : (Object.entries(state.panes).find(([, pane]) =>
+              pane.tabs.some((candidate) => candidate.id === tabId)
+            )?.[0] ?? null)
+        if (!resolvedFromPaneId || resolvedFromPaneId === toPaneId) return
+
+        const fromPane = state.panes[resolvedFromPaneId]
         const toPane = state.panes[toPaneId]
         if (!fromPane || !toPane) return
 
@@ -626,10 +640,10 @@ export const usePanesStore = create<PanesStoreState>()(
         // Remove from source pane
         if (fromTabs.length === 0) {
           // Source pane becomes empty, close it
-          delete newPanes[fromPaneId]
-          const newLayout = removePaneFromLayout(state.layout, fromPaneId)
+          delete newPanes[resolvedFromPaneId]
+          const newLayout = removePaneFromLayout(state.layout, resolvedFromPaneId)
           const nextFocusRequests = { ...state.focusRequestsByPane }
-          delete nextFocusRequests[fromPaneId]
+          delete nextFocusRequests[resolvedFromPaneId]
           set({
             layout: newLayout,
             panes: newPanes,
@@ -642,7 +656,7 @@ export const usePanesStore = create<PanesStoreState>()(
               ? pickNextActiveTab(fromTabs, fromIndex)
               : fromPane.activeTabId
 
-          newPanes[fromPaneId] = {
+          newPanes[resolvedFromPaneId] = {
             ...fromPane,
             tabs: fromTabs,
             activeTabId: fromActiveTabId

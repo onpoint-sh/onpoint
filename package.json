@@ -6,7 +6,8 @@
     "onlyBuiltDependencies": [
       "electron",
       "esbuild",
-      "electron-winstaller"
+      "electron-winstaller",
+      "node-pty"
     ]
   },
   "scripts": {

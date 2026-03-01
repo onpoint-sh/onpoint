@@ -1,4 +1,9 @@
-export const SETTINGS_SECTION_IDS = ['appearance', 'keyboard-shortcuts', 'ghost-mode'] as const
+export const SETTINGS_SECTION_IDS = [
+  'appearance',
+  'terminal',
+  'keyboard-shortcuts',
+  'ghost-mode'
+] as const
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
 

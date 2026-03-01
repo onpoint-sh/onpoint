@@ -33,6 +33,13 @@ export type ShortcutActionId =
   | 'toggle_ghost_mode'
   | 'new_window'
   | 'search'
+  | 'new_terminal'
+  | 'focus_terminal'
+  | 'kill_terminal'
+  | 'clear_terminal'
+  | 'split_terminal'
+  | 'split_terminal_right'
+  | 'split_terminal_down'
 
 export type ShortcutDefinition = {
   id: ShortcutActionId
@@ -295,6 +302,76 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     defaultScope: 'window',
     defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
     whenPresets: ['window_focused']
+  },
+  {
+    id: 'new_terminal',
+    label: 'New Terminal',
+    description: 'Create a new terminal session in the bottom panel.',
+    defaultAccelerator: 'CommandOrControl+Alt+T',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
+  },
+  {
+    id: 'focus_terminal',
+    label: 'Focus Terminal',
+    description: 'Show the bottom panel and focus the active terminal session.',
+    defaultAccelerator: 'CommandOrControl+Alt+J',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
+  },
+  {
+    id: 'kill_terminal',
+    label: 'Kill Terminal',
+    description: 'Terminate the currently focused terminal session.',
+    defaultAccelerator: 'CommandOrControl+Alt+K',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
+  },
+  {
+    id: 'clear_terminal',
+    label: 'Clear Terminal',
+    description: 'Clear the output of the focused terminal session.',
+    defaultAccelerator: 'CommandOrControl+Alt+L',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
+  },
+  {
+    id: 'split_terminal',
+    label: 'Split Terminal',
+    description: 'Split the focused terminal to the right.',
+    defaultAccelerator: 'CommandOrControl+Alt+\\',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
+  },
+  {
+    id: 'split_terminal_right',
+    label: 'Split Terminal Right',
+    description: 'Split the focused terminal to the right.',
+    defaultAccelerator: 'CommandOrControl+Alt+\\',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
+  },
+  {
+    id: 'split_terminal_down',
+    label: 'Split Terminal Down',
+    description: 'Split the focused terminal downward.',
+    defaultAccelerator: 'CommandOrControl+Alt+Shift+\\',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   }
 ] as const
 
@@ -379,7 +456,14 @@ export function getDefaultShortcutBindings(): ShortcutBindings {
       show_main_window: 'CommandOrControl+Shift+Space',
       toggle_ghost_mode: 'CommandOrControl+Shift+G',
       new_window: 'CommandOrControl+Shift+N',
-      search: 'CommandOrControl+K'
+      search: 'CommandOrControl+K',
+      new_terminal: 'CommandOrControl+Alt+T',
+      focus_terminal: 'CommandOrControl+Alt+J',
+      kill_terminal: 'CommandOrControl+Alt+K',
+      clear_terminal: 'CommandOrControl+Alt+L',
+      split_terminal: 'CommandOrControl+Alt+\\',
+      split_terminal_right: 'CommandOrControl+Alt+\\',
+      split_terminal_down: 'CommandOrControl+Alt+Shift+\\'
     }
   )
 }

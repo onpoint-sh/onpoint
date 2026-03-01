@@ -8,6 +8,7 @@ import { SearchPalette } from '@/components/search/search-palette'
 import { SettingsSidebarNav } from '@/components/layout/settings-sidebar-nav'
 import { NotesSidebar } from '@/components/notes/notes-sidebar'
 import { IS_DETACHED_WINDOW } from '@/lib/detached-window'
+import { isTerminalEditorPath } from '@/lib/terminal-editor-tab'
 import { DEFAULT_SETTINGS_SECTION_ID, getSettingsSectionPath } from '@/pages/settings-sections'
 import { HomePage } from '@/pages/home-page'
 import { SettingsPage } from '@/pages/settings-page'
@@ -16,6 +17,7 @@ import { useBottomPanelStore } from '@/stores/bottom-panel-store'
 import { useLayoutStore } from '@/stores/layout-store'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 function App(): React.JSX.Element {
   const location = useLocation()
@@ -33,6 +35,64 @@ function App(): React.JSX.Element {
     (actionId: ShortcutActionId, origin: 'window' | 'global' = 'window'): void => {
       const bottomPanelState = useBottomPanelStore.getState()
       const shouldRouteToBottomPanel = bottomPanelState.isOpen && bottomPanelState.isFocused
+      const terminalState = useTerminalStore.getState()
+
+      const closeFocusedBottomPanelTab = (): void => {
+        const pane = bottomPanelState.getFocusedPane()
+        if (!pane?.activeTabId) return
+        const tab = pane.tabs.find((candidate) => candidate.id === pane.activeTabId)
+        if (tab?.viewId === 'terminal') {
+          void terminalState.detachBottomPanelTab(tab.id)
+        }
+        bottomPanelState.closeTab(pane.id, pane.activeTabId)
+      }
+
+      const ensureFocusedTerminalTabId = (): string | null => {
+        const latestBottomPanelState = useBottomPanelStore.getState()
+        latestBottomPanelState.showAndFocus()
+
+        let pane = latestBottomPanelState.getFocusedPane()
+        let activeTabId = pane?.activeTabId ?? null
+        let activeTab = activeTabId
+          ? (pane?.tabs.find((candidate) => candidate.id === activeTabId) ?? null)
+          : null
+
+        if (!activeTab || activeTab.viewId !== 'terminal') {
+          latestBottomPanelState.openView('terminal', pane?.id)
+          pane = useBottomPanelStore.getState().getFocusedPane()
+          activeTabId = pane?.activeTabId ?? null
+          activeTab = activeTabId
+            ? (pane?.tabs.find((candidate) => candidate.id === activeTabId) ?? null)
+            : null
+        }
+
+        if (!activeTab || activeTab.viewId !== 'terminal') return null
+        return activeTab.id
+      }
+
+      const splitActiveBottomTerminal = (direction: 'row' | 'column'): void => {
+        const terminalTabId = ensureFocusedTerminalTabId()
+        if (!terminalTabId) return
+
+        void (async () => {
+          const terminalStore = useTerminalStore.getState()
+          await terminalStore.ensureGroupForBottomPanelTab(terminalTabId)
+          const group = useTerminalStore.getState().getGroupForBottomPanelTab(terminalTabId)
+          const sourceSessionId =
+            group?.activeSessionId ??
+            useTerminalStore.getState().getSessionIdsForBottomPanelTab(terminalTabId)[0] ??
+            null
+
+          if (!sourceSessionId) {
+            await useTerminalStore.getState().createSessionInGroup(terminalTabId)
+            return
+          }
+
+          await useTerminalStore
+            .getState()
+            .splitSessionInGroup(terminalTabId, sourceSessionId, direction)
+        })()
+      }
 
       if (actionId === 'toggle_bottom_panel') {
         if (bottomPanelState.isOpen) {
@@ -70,10 +130,7 @@ function App(): React.JSX.Element {
 
       if (actionId === 'close_tab') {
         if (shouldRouteToBottomPanel) {
-          const pane = bottomPanelState.getFocusedPane()
-          if (pane?.activeTabId) {
-            bottomPanelState.closeTab(pane.id, pane.activeTabId)
-          }
+          closeFocusedBottomPanelTab()
           return
         }
 
@@ -175,7 +232,87 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'search') {
+        if (terminalState.isTerminalFocus && terminalState.focusedSessionId) {
+          void terminalState.clearBuffer(terminalState.focusedSessionId)
+          return
+        }
         setIsSearchOpen(true)
+        return
+      }
+
+      if (actionId === 'new_terminal') {
+        bottomPanelState.showAndFocus()
+        const terminalTabId = ensureFocusedTerminalTabId()
+        if (!terminalTabId) return
+
+        void (async () => {
+          const latestTerminalState = useTerminalStore.getState()
+          if (latestTerminalState.getSessionIdsForBottomPanelTab(terminalTabId).length > 0) {
+            await latestTerminalState.createSessionInGroup(terminalTabId)
+          } else {
+            await latestTerminalState.ensureGroupForBottomPanelTab(terminalTabId)
+          }
+        })()
+        return
+      }
+
+      if (actionId === 'focus_terminal') {
+        bottomPanelState.showAndFocus()
+        bottomPanelState.openView('terminal')
+        return
+      }
+
+      if (actionId === 'split_terminal' || actionId === 'split_terminal_right') {
+        splitActiveBottomTerminal('row')
+        return
+      }
+
+      if (actionId === 'split_terminal_down') {
+        splitActiveBottomTerminal('column')
+        return
+      }
+
+      if (actionId === 'clear_terminal') {
+        if (terminalState.focusedSessionId) {
+          void terminalState.clearBuffer(terminalState.focusedSessionId)
+        }
+        return
+      }
+
+      if (actionId === 'kill_terminal') {
+        if (terminalState.focusedSessionId) {
+          const focusedSessionId = terminalState.focusedSessionId
+          const bottomPanelTabId = terminalState.getBottomPanelTabIdForSession(focusedSessionId)
+
+          void (async () => {
+            await useTerminalStore.getState().killSession(focusedSessionId)
+
+            if (!bottomPanelTabId) return
+            const group = useTerminalStore.getState().getGroupForBottomPanelTab(bottomPanelTabId)
+            if (group) return
+
+            const latestBottomPanelState = useBottomPanelStore.getState()
+            for (const pane of Object.values(latestBottomPanelState.panes)) {
+              if (!pane.tabs.some((tab) => tab.id === bottomPanelTabId)) continue
+              latestBottomPanelState.closeTab(pane.id, bottomPanelTabId)
+              break
+            }
+          })()
+
+          return
+        }
+
+        const panesState = usePanesStore.getState()
+        const pane = panesState.getFocusedPane()
+        const activeTab = pane?.tabs.find((tab) => tab.id === pane.activeTabId)
+        if (pane && activeTab && isTerminalEditorPath(activeTab.relativePath)) {
+          panesState.closeTab(pane.id, activeTab.id)
+          return
+        }
+
+        if (shouldRouteToBottomPanel) {
+          closeFocusedBottomPanelTab()
+        }
       }
     },
     [navigate, pickVault, toggleSidebar]
@@ -256,6 +393,81 @@ function App(): React.JSX.Element {
     }
   }, [dispatchShortcutAction])
 
+  useEffect(() => {
+    const terminalState = useTerminalStore.getState()
+    void terminalState.initialize()
+
+    const consolidateTerminalTabs = (): void => {
+      const bottomState = useBottomPanelStore.getState()
+      const latestTerminalState = useTerminalStore.getState()
+
+      for (const pane of Object.values(bottomState.panes)) {
+        const terminalTabs = pane.tabs.filter((tab) => tab.viewId === 'terminal')
+        if (terminalTabs.length <= 1) continue
+
+        const keepTabId =
+          pane.activeTabId && terminalTabs.some((tab) => tab.id === pane.activeTabId)
+            ? pane.activeTabId
+            : terminalTabs[0]?.id
+
+        if (!keepTabId) continue
+
+        for (const tab of terminalTabs) {
+          if (tab.id === keepTabId) continue
+          latestTerminalState.mergeBottomPanelTabSessions(tab.id, keepTabId)
+          bottomState.closeTab(pane.id, tab.id)
+        }
+      }
+    }
+
+    const syncBottomPanelTabs = (): void => {
+      consolidateTerminalTabs()
+      const bottomState = useBottomPanelStore.getState()
+      const terminalTabIds: string[] = []
+
+      for (const pane of Object.values(bottomState.panes)) {
+        for (const tab of pane.tabs) {
+          if (tab.viewId === 'terminal') {
+            terminalTabIds.push(tab.id)
+          }
+        }
+      }
+
+      void useTerminalStore.getState().syncBottomPanelTabIds(terminalTabIds)
+    }
+
+    const syncEditorPaths = (): void => {
+      const panesState = usePanesStore.getState()
+      const terminalPaths: string[] = []
+
+      for (const pane of Object.values(panesState.panes)) {
+        for (const tab of pane.tabs) {
+          if (tab.relativePath.startsWith('terminal://')) {
+            terminalPaths.push(tab.relativePath)
+          }
+        }
+      }
+
+      void useTerminalStore.getState().syncEditorPaths(terminalPaths)
+    }
+
+    syncBottomPanelTabs()
+    syncEditorPaths()
+
+    const unsubscribeBottom = useBottomPanelStore.subscribe(() => {
+      syncBottomPanelTabs()
+    })
+
+    const unsubscribePanes = usePanesStore.subscribe(() => {
+      syncEditorPaths()
+    })
+
+    return () => {
+      unsubscribeBottom()
+      unsubscribePanes()
+    }
+  }, [])
+
   const sidebarContent = IS_DETACHED_WINDOW ? undefined : location.pathname.startsWith(
       '/settings'
     ) ? (
@@ -287,6 +499,16 @@ function App(): React.JSX.Element {
               element={
                 <SettingsPage
                   section="appearance"
+                  profile={shortcutProfile}
+                  isShortcutsLoading={isShortcutsLoading}
+                />
+              }
+            />
+            <Route
+              path={getSettingsSectionPath('terminal')}
+              element={
+                <SettingsPage
+                  section="terminal"
                   profile={shortcutProfile}
                   isShortcutsLoading={isShortcutsLoading}
                 />

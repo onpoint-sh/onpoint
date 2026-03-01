@@ -19,6 +19,9 @@ import { setupApplicationMenu } from './menu'
 import { createShortcutService } from './shortcuts'
 import { registerNotesIpc } from './notes/ipc'
 import { copyNotesConfig, deleteNotesConfig } from './notes/store'
+import { registerTerminalIpc } from './terminal/ipc'
+import { createTerminalService } from './terminal/service'
+import { copyTerminalSettings, deleteTerminalSettings } from './terminal/store'
 import { WINDOW_IPC_CHANNELS } from '@onpoint/shared/window'
 
 type WindowTracker = { save: () => void; remove: () => void }
@@ -26,6 +29,7 @@ const windowTrackers = new Map<string, WindowTracker>()
 
 let isQuitting = false
 let onWindowCreated: ((window: BrowserWindow) => void) | null = null
+let terminalService: ReturnType<typeof createTerminalService> | null = null
 
 function createAppWindow(
   windowId?: string,
@@ -46,10 +50,13 @@ function createAppWindow(
   })
 
   window.on('closed', () => {
+    terminalService?.handleWindowClosed(id)
+
     if (!isQuitting) {
       tracker.remove()
       if (id !== 'main') {
         void deleteNotesConfig(id)
+        void deleteTerminalSettings(id)
       }
     }
     windowTrackers.delete(id)
@@ -114,6 +121,7 @@ app.whenReady().then(() => {
 
       // Copy parent's notes config so the new window has the same vaultPath
       await copyNotesConfig(parentWindowId, newWindowId)
+      await copyTerminalSettings(parentWindowId, newWindowId)
 
       const newWindow = createAppWindow(
         newWindowId,
@@ -140,6 +148,10 @@ app.whenReady().then(() => {
   })
 
   const unregisterNotesIpc = registerNotesIpc()
+  terminalService = createTerminalService({
+    getWindowById: (windowId) => windowRegistry.getWindow(windowId)
+  })
+  const unregisterTerminalIpc = registerTerminalIpc(terminalService)
 
   const ghostModeService = createGhostModeService({
     getWindows: () => windowRegistry.getAllWindows()
@@ -209,6 +221,9 @@ app.whenReady().then(() => {
   app.on('will-quit', () => {
     ghostModeService.dispose()
     unregisterNotesIpc()
+    unregisterTerminalIpc()
+    terminalService?.dispose()
+    terminalService = null
     shortcutService.dispose()
   })
 })

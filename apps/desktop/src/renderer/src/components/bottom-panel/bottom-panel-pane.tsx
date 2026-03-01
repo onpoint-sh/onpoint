@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useDrag, useDragLayer, useDrop } from 'react-dnd'
 import type { MosaicDirection } from 'react-mosaic-component'
+import { ChevronDown, Plus } from 'lucide-react'
 import {
   BOTTOM_PANEL_VIEW_DEFINITIONS,
   BOTTOM_PANEL_VIEW_DEFINITIONS_BY_ID
@@ -8,6 +9,7 @@ import {
 import { TabCloseButton } from '@/components/common/tab-close-button'
 import { useBottomPanelStore } from '@/stores/bottom-panel-store'
 import { usePanesStore } from '@/stores/panes-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { createTerminalEditorPath } from '@/lib/terminal-editor-tab'
 import { BottomPanelViewContent } from './bottom-panel-view-content'
 import {
@@ -38,6 +40,7 @@ function DraggableBottomPanelTab({
   index,
   isActive,
   label,
+  isClosable = true,
   onActivate,
   onClose
 }: {
@@ -46,6 +49,7 @@ function DraggableBottomPanelTab({
   index: number
   isActive: boolean
   label: string
+  isClosable?: boolean
   onActivate: () => void
   onClose: () => void
 }): React.JSX.Element {
@@ -105,7 +109,9 @@ function DraggableBottomPanelTab({
       }}
     >
       <span className="bottom-panel-tab-label">{label}</span>
-      <TabCloseButton className="tab-close-button" label={`Close ${label}`} onClick={onClose} />
+      {isClosable ? (
+        <TabCloseButton className="tab-close-button" label={`Close ${label}`} onClick={onClose} />
+      ) : null}
     </div>
   )
 }
@@ -181,12 +187,56 @@ function BottomPanelPane({ paneId }: BottomPanelPaneProps): React.JSX.Element | 
   const isMaximized = useBottomPanelStore((state) => state.isMaximized)
   const openEditorTab = usePanesStore((state) => state.openTab)
   const requestEditorFocus = usePanesStore((state) => state.requestEditorFocus)
+  const createTerminalSession = useTerminalStore((state) => state.createSession)
+  const attachEditorPathToSession = useTerminalStore((state) => state.attachEditorPathToSession)
+  const detachBottomPanelTab = useTerminalStore((state) => state.detachBottomPanelTab)
+  const ensureGroupForBottomPanelTab = useTerminalStore(
+    (state) => state.ensureGroupForBottomPanelTab
+  )
 
   const isTabDragging = useDragLayer(
     (monitor) => monitor.isDragging() && monitor.getItemType() === BOTTOM_PANEL_TAB_DND_TYPE
   )
 
   const activeTab = pane?.tabs.find((tab) => tab.id === pane.activeTabId) ?? null
+
+  const closeTabWithTerminalCleanup = useCallback(
+    (targetPaneId: string, targetTabId: string) => {
+      const targetPane = useBottomPanelStore.getState().panes[targetPaneId]
+      const targetTab = targetPane?.tabs.find((tab) => tab.id === targetTabId)
+      if (targetTab?.viewId === 'terminal') {
+        void detachBottomPanelTab(targetTabId)
+      }
+      closeTab(targetPaneId, targetTabId)
+    },
+    [closeTab, detachBottomPanelTab]
+  )
+
+  const splitActiveTerminalSession = useCallback(
+    (direction: MosaicDirection) => {
+      const latestBottomPanelState = useBottomPanelStore.getState()
+      const latestPane = latestBottomPanelState.panes[paneId]
+      const tab = latestPane?.tabs.find((candidate) => candidate.id === latestPane.activeTabId)
+
+      if (!tab || tab.viewId !== 'terminal') return
+
+      void (async () => {
+        await ensureGroupForBottomPanelTab(tab.id)
+        const terminalState = useTerminalStore.getState()
+        const group = terminalState.getGroupForBottomPanelTab(tab.id)
+        const sourceSessionId =
+          group?.activeSessionId ?? terminalState.getSessionIdsForBottomPanelTab(tab.id)[0] ?? null
+
+        if (!sourceSessionId) {
+          await terminalState.createSessionInGroup(tab.id)
+          return
+        }
+
+        await terminalState.splitSessionInGroup(tab.id, sourceSessionId, direction)
+      })()
+    },
+    [ensureGroupForBottomPanelTab, paneId]
+  )
 
   const handleOpenAddViewMenu = useCallback(async () => {
     const clickedId = await window.contextMenu.show([
@@ -201,15 +251,70 @@ function BottomPanelPane({ paneId }: BottomPanelPaneProps): React.JSX.Element | 
     if (!clickedId) return
 
     if (clickedId === 'new-terminal-editor') {
-      openEditorTab(createTerminalEditorPath())
+      const session = await createTerminalSession({ surface: 'editor' })
+      const path = createTerminalEditorPath(session.id)
+      attachEditorPathToSession(path, session.id)
+      openEditorTab(path)
       requestEditorFocus()
       return
     }
 
     const selectedView = BOTTOM_PANEL_VIEW_DEFINITIONS.find((view) => view.id === clickedId)
     if (!selectedView) return
+
+    if (selectedView.id === 'terminal') {
+      const latestBottomPanelState = useBottomPanelStore.getState()
+      latestBottomPanelState.openView('terminal', paneId)
+
+      const latestPane = useBottomPanelStore.getState().panes[paneId]
+      const terminalTab =
+        latestPane?.tabs.find(
+          (candidate) => candidate.id === latestPane.activeTabId && candidate.viewId === 'terminal'
+        ) ??
+        latestPane?.tabs.find((candidate) => candidate.viewId === 'terminal') ??
+        null
+
+      if (!terminalTab) return
+
+      const terminalState = useTerminalStore.getState()
+      if (terminalState.getSessionIdsForBottomPanelTab(terminalTab.id).length > 0) {
+        await terminalState.createSessionInGroup(terminalTab.id)
+      } else {
+        await terminalState.ensureGroupForBottomPanelTab(terminalTab.id)
+      }
+      return
+    }
+
     openView(selectedView.id, paneId, { allowDuplicate: true })
-  }, [openEditorTab, openView, paneId, requestEditorFocus])
+  }, [
+    attachEditorPathToSession,
+    createTerminalSession,
+    openEditorTab,
+    openView,
+    paneId,
+    requestEditorFocus
+  ])
+
+  const handleQuickAddView = useCallback(() => {
+    if (!activeTab) {
+      openView('terminal', paneId, { allowDuplicate: true })
+      return
+    }
+
+    if (activeTab.viewId === 'terminal') {
+      void (async () => {
+        const terminalState = useTerminalStore.getState()
+        if (terminalState.getSessionIdsForBottomPanelTab(activeTab.id).length > 0) {
+          await terminalState.createSessionInGroup(activeTab.id)
+        } else {
+          await terminalState.ensureGroupForBottomPanelTab(activeTab.id)
+        }
+      })()
+      return
+    }
+
+    openView(activeTab.viewId, paneId, { allowDuplicate: true })
+  }, [activeTab, openView, paneId])
 
   const viewActions = buildViewToolbarActions({
     paneId,
@@ -217,21 +322,29 @@ function BottomPanelPane({ paneId }: BottomPanelPaneProps): React.JSX.Element | 
     api: {
       openView,
       splitPane,
-      closeTab,
+      closeTab: closeTabWithTerminalCleanup,
       toggleMaximize,
       hidePanel
-    }
+    },
+    terminalApi:
+      activeTab?.viewId === 'terminal'
+        ? {
+            splitRight: () => {
+              splitActiveTerminalSession('row')
+            },
+            splitDown: () => {
+              splitActiveTerminalSession('column')
+            }
+          }
+        : undefined
   })
 
   const globalActions = buildGlobalToolbarActions({
     isMaximized,
-    onOpenAddViewMenu: () => {
-      void handleOpenAddViewMenu()
-    },
     api: {
       openView,
       splitPane,
-      closeTab,
+      closeTab: closeTabWithTerminalCleanup,
       toggleMaximize,
       hidePanel
     }
@@ -324,17 +437,40 @@ function BottomPanelPane({ paneId }: BottomPanelPaneProps): React.JSX.Element | 
                 index={index}
                 isActive={isActive}
                 label={view.title}
+                isClosable={tab.viewId !== 'terminal'}
                 onActivate={() => {
                   setActiveTab(paneId, tab.id)
                 }}
                 onClose={() => {
-                  closeTab(paneId, tab.id)
+                  closeTabWithTerminalCleanup(paneId, tab.id)
                 }}
               />
             )
           })}
         </div>
         <div className="bottom-panel-toolbar">
+          <div className="bottom-panel-toolbar-split-add" role="group" aria-label="Add panel tab">
+            <button
+              type="button"
+              className="bottom-panel-toolbar-split-add-btn"
+              onClick={handleQuickAddView}
+              title="New Tab"
+              aria-label="New Tab"
+            >
+              <Plus className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              className="bottom-panel-toolbar-split-add-btn"
+              onClick={() => {
+                void handleOpenAddViewMenu()
+              }}
+              title="More Add Options"
+              aria-label="More Add Options"
+            >
+              <ChevronDown className="size-3.5" />
+            </button>
+          </div>
           {viewActions.map(renderToolbarAction)}
           <div className="bottom-panel-toolbar-separator" />
           {globalActions.map(renderToolbarAction)}
@@ -349,7 +485,7 @@ function BottomPanelPane({ paneId }: BottomPanelPaneProps): React.JSX.Element | 
         data-dragging={isTabDragging ? 'true' : undefined}
       >
         {activeTab ? (
-          <BottomPanelViewContent viewId={activeTab.viewId} />
+          <BottomPanelViewContent viewId={activeTab.viewId} tabId={activeTab.id} />
         ) : (
           <div className="bottom-panel-empty-state">
             <h3 className="bottom-panel-empty-title">No panel view</h3>

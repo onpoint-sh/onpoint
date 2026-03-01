@@ -460,6 +460,7 @@ export const useBottomPanelStore = create<BottomPanelStoreState>()(
           const state = get()
           const targetPaneId = paneId ?? state.focusedPaneId
           const allowDuplicate = options?.allowDuplicate ?? false
+          const shouldAllowDuplicate = allowDuplicate && viewId !== 'terminal'
 
           if (!targetPaneId || !state.panes[targetPaneId]) {
             const pane = createPane(viewId)
@@ -480,7 +481,7 @@ export const useBottomPanelStore = create<BottomPanelStoreState>()(
           }
 
           const pane = state.panes[targetPaneId]
-          const existingTab = allowDuplicate
+          const existingTab = shouldAllowDuplicate
             ? undefined
             : pane.tabs.find((tab) => tab.viewId === viewId)
 

@@ -4,11 +4,14 @@ import { Pin } from 'lucide-react'
 import { useIconThemeAdapter } from '@onpoint/icon-themes'
 import { isUntitledPath } from '@onpoint/shared/notes'
 import { getFileExtension } from '@/lib/file-types'
-import { isTerminalEditorPath } from '@/lib/terminal-editor-tab'
+import { createTerminalEditorPath, isTerminalEditorPath } from '@/lib/terminal-editor-tab'
+import { BOTTOM_PANEL_TAB_DND_TYPE, type BottomPanelTabDragItem } from '@/lib/bottom-panel-dnd'
 import { TabCloseButton } from '@/components/common/tab-close-button'
+import { useBottomPanelStore } from '@/stores/bottom-panel-store'
 import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { usePanesStore, findAdjacentPaneId } from '@/stores/panes-store'
 import { useNotesStore } from '@/stores/notes-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 const TAB_DND_TYPE = 'PANE_TAB'
 
@@ -132,18 +135,71 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   const pinTab = usePanesStore((s) => s.pinTab)
   const unpinTab = usePanesStore((s) => s.unpinTab)
   const requestCloseTab = usePanesStore((s) => s.requestCloseTab)
+  const ensureGroupForBottomPanelTab = useTerminalStore((s) => s.ensureGroupForBottomPanelTab)
+  const getSessionIdsForBottomPanelTab = useTerminalStore((s) => s.getSessionIdsForBottomPanelTab)
+  const attachEditorPathToSession = useTerminalStore((s) => s.attachEditorPathToSession)
+  const detachBottomPanelTab = useTerminalStore((s) => s.detachBottomPanelTab)
   const notes = useNotesStore((s) => s.notes)
   const iconThemeId = useIconThemeStore((s) => s.iconThemeId)
   const iconAdapter = useIconThemeAdapter(iconThemeId)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
+  const handleBottomPanelTerminalDrop = useCallback(
+    (item: BottomPanelTabDragItem) => {
+      void (async () => {
+        const bottomPanelState = useBottomPanelStore.getState()
+        const sourcePane = bottomPanelState.panes[item.paneId]
+        const sourceTab = sourcePane?.tabs.find((candidate) => candidate.id === item.tabId)
+        if (!sourceTab || sourceTab.viewId !== 'terminal') return
+
+        await ensureGroupForBottomPanelTab(item.tabId)
+        let sessionIds = getSessionIdsForBottomPanelTab(item.tabId)
+        if (sessionIds.length === 0) {
+          const createdSessionId = await useTerminalStore
+            .getState()
+            .createSessionInGroup(item.tabId)
+          sessionIds = [createdSessionId]
+        }
+
+        for (const sessionId of sessionIds) {
+          const terminalPath = createTerminalEditorPath(sessionId)
+          attachEditorPathToSession(terminalPath, sessionId)
+          usePanesStore.getState().openTab(terminalPath, paneId)
+        }
+
+        await detachBottomPanelTab(item.tabId)
+        bottomPanelState.closeTab(item.paneId, item.tabId)
+      })()
+    },
+    [
+      attachEditorPathToSession,
+      detachBottomPanelTab,
+      ensureGroupForBottomPanelTab,
+      getSessionIdsForBottomPanelTab,
+      paneId
+    ]
+  )
+
   // Drop target for the tab bar itself (drop into empty area)
-  const [{ isOver: isBarOver }, barDropRef] = useDrop<TabDragItem, unknown, { isOver: boolean }>({
-    accept: TAB_DND_TYPE,
-    drop(item) {
-      if (item.paneId !== paneId) {
-        moveTabToPane(item.paneId, item.tabId, paneId)
+  const [{ isOver: isBarOver }, barDropRef] = useDrop<
+    TabDragItem | BottomPanelTabDragItem,
+    unknown,
+    { isOver: boolean }
+  >({
+    accept: [TAB_DND_TYPE, BOTTOM_PANEL_TAB_DND_TYPE],
+    drop(item, monitor) {
+      const itemType = monitor.getItemType()
+      if (itemType === TAB_DND_TYPE) {
+        const editorItem = item as TabDragItem
+        if (editorItem.paneId !== paneId) {
+          moveTabToPane(editorItem.paneId, editorItem.tabId, paneId)
+        }
+        return
+      }
+
+      if (itemType === BOTTOM_PANEL_TAB_DND_TYPE) {
+        handleBottomPanelTerminalDrop(item as BottomPanelTabDragItem)
       }
     },
     collect: (monitor) => ({

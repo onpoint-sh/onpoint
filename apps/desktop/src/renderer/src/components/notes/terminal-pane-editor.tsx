@@ -1,23 +1,62 @@
-import { createTerminalEditorPath, getTerminalEditorId } from '@/lib/terminal-editor-tab'
+import { useEffect } from 'react'
+import { XtermHost } from '@/components/terminal/xterm-host'
+import { getTerminalEditorId, isTerminalEditorPath } from '@/lib/terminal-editor-tab'
+import { usePanesStore } from '@/stores/panes-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 
 type TerminalPaneEditorProps = {
+  tabId?: string
   relativePath: string | null
 }
 
-function TerminalPaneEditor({ relativePath }: TerminalPaneEditorProps): React.JSX.Element {
-  const terminalId = relativePath ? getTerminalEditorId(relativePath) : ''
+function TerminalPaneEditor({ tabId, relativePath }: TerminalPaneEditorProps): React.JSX.Element {
+  const initialize = useTerminalStore((state) => state.initialize)
+  const ensureSessionForEditorPath = useTerminalStore((state) => state.ensureSessionForEditorPath)
+  const mappedSessionId = useTerminalStore((state) =>
+    relativePath ? (state.sessionByEditorPath[relativePath] ?? null) : null
+  )
+  const parsedSessionId =
+    relativePath && isTerminalEditorPath(relativePath) ? getTerminalEditorId(relativePath) : ''
+  const sessionId = mappedSessionId || parsedSessionId || null
+  const session = useTerminalStore((state) =>
+    sessionId ? (state.sessionsById[sessionId] ?? null) : null
+  )
+
+  useEffect(() => {
+    void initialize()
+  }, [initialize])
+
+  useEffect(() => {
+    if (!relativePath || (sessionId && session)) return
+    let cancelled = false
+    void (async () => {
+      const resolved = await ensureSessionForEditorPath(relativePath)
+      if (cancelled) return
+
+      if (resolved.path !== relativePath && tabId) {
+        usePanesStore.getState().updateTabPath(relativePath, resolved.path)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [ensureSessionForEditorPath, relativePath, session, sessionId, tabId])
+
+  if (!sessionId || !session) {
+    return (
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
+        <div className="bottom-panel-empty-state">
+          <h3 className="bottom-panel-empty-title">Terminal</h3>
+          <p className="bottom-panel-empty-description">Starting shell session...</p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex h-full flex-col gap-2 p-3">
-        <h3 className="m-0 text-sm font-semibold">Terminal</h3>
-        <p className="m-0 text-xs text-muted-foreground">
-          Terminal tabs in the editor are scaffolded and ready for session binding.
-        </p>
-        <code className="rounded border border-border bg-muted px-2 py-1 text-xs text-muted-foreground">
-          {terminalId || createTerminalEditorPath('session').replace('terminal://', '')}
-        </code>
-      </div>
+      <XtermHost sessionId={sessionId} autoFocus />
     </section>
   )
 }

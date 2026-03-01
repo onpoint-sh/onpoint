@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, Keyboard, Palette } from 'lucide-react'
+import { ArrowLeft, Eye, Keyboard, Palette, SquareTerminal } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   DEFAULT_SETTINGS_SECTION_ID,
@@ -15,6 +15,7 @@ type SettingsNavItem = {
 
 const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'terminal', label: 'Terminal', icon: SquareTerminal },
   { id: 'keyboard-shortcuts', label: 'Keyboard shortcuts', icon: Keyboard },
   { id: 'ghost-mode', label: 'Ghost mode', icon: Eye }
 ]

@@ -29,6 +29,20 @@ import {
 } from '@onpoint/shared/notes'
 import { GHOST_MODE_IPC_CHANNELS, type GhostModeConfig } from '@onpoint/shared/ghost-mode'
 import { WINDOW_IPC_CHANNELS } from '@onpoint/shared/window'
+import {
+  TERMINAL_EVENT_CHANNELS,
+  TERMINAL_IPC_CHANNELS,
+  type TerminalBellEvent,
+  type TerminalCreateOptions,
+  type TerminalDataEvent,
+  type TerminalExitEvent,
+  type TerminalSessionChangedEvent,
+  type TerminalSessionId,
+  type TerminalSessionMetaPatch,
+  type TerminalSessionSummary,
+  type TerminalSettings,
+  type TerminalTitleEvent
+} from '@onpoint/shared/terminal'
 
 const IPC_CHANNELS = {
   minimize: 'window-controls:minimize',
@@ -230,6 +244,81 @@ const notes = {
   listFolders: () => ipcRenderer.invoke(NOTES_IPC_CHANNELS.listFolders) as Promise<string[]>
 }
 
+const terminals = {
+  createSession: (options?: TerminalCreateOptions) =>
+    ipcRenderer.invoke(
+      TERMINAL_IPC_CHANNELS.createSession,
+      options
+    ) as Promise<TerminalSessionSummary>,
+  listSessions: () =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.listSessions) as Promise<TerminalSessionSummary[]>,
+  write: (sessionId: TerminalSessionId, data: string) =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.write, sessionId, data) as Promise<void>,
+  resize: (sessionId: TerminalSessionId, cols: number, rows: number) =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.resize, sessionId, cols, rows) as Promise<void>,
+  kill: (sessionId: TerminalSessionId) =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.kill, sessionId) as Promise<void>,
+  clearBuffer: (sessionId: TerminalSessionId) =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.clearBuffer, sessionId) as Promise<void>,
+  readBuffer: (sessionId: TerminalSessionId) =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.readBuffer, sessionId) as Promise<string>,
+  updateSessionMeta: (sessionId: TerminalSessionId, patch: TerminalSessionMetaPatch) =>
+    ipcRenderer.invoke(
+      TERMINAL_IPC_CHANNELS.updateSessionMeta,
+      sessionId,
+      patch
+    ) as Promise<TerminalSessionSummary>,
+  getSettings: () =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.getSettings) as Promise<TerminalSettings>,
+  updateSettings: (patch: Partial<TerminalSettings>) =>
+    ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.updateSettings, patch) as Promise<TerminalSettings>,
+  onData: (callback: (event: TerminalDataEvent) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, payload: TerminalDataEvent): void => {
+      callback(payload)
+    }
+    ipcRenderer.on(TERMINAL_EVENT_CHANNELS.data, listener)
+    return () => {
+      ipcRenderer.removeListener(TERMINAL_EVENT_CHANNELS.data, listener)
+    }
+  },
+  onExit: (callback: (event: TerminalExitEvent) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, payload: TerminalExitEvent): void => {
+      callback(payload)
+    }
+    ipcRenderer.on(TERMINAL_EVENT_CHANNELS.exit, listener)
+    return () => {
+      ipcRenderer.removeListener(TERMINAL_EVENT_CHANNELS.exit, listener)
+    }
+  },
+  onTitle: (callback: (event: TerminalTitleEvent) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, payload: TerminalTitleEvent): void => {
+      callback(payload)
+    }
+    ipcRenderer.on(TERMINAL_EVENT_CHANNELS.title, listener)
+    return () => {
+      ipcRenderer.removeListener(TERMINAL_EVENT_CHANNELS.title, listener)
+    }
+  },
+  onBell: (callback: (event: TerminalBellEvent) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, payload: TerminalBellEvent): void => {
+      callback(payload)
+    }
+    ipcRenderer.on(TERMINAL_EVENT_CHANNELS.bell, listener)
+    return () => {
+      ipcRenderer.removeListener(TERMINAL_EVENT_CHANNELS.bell, listener)
+    }
+  },
+  onSessionChanged: (callback: (event: TerminalSessionChangedEvent) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, payload: TerminalSessionChangedEvent): void => {
+      callback(payload)
+    }
+    ipcRenderer.on(TERMINAL_EVENT_CHANNELS.sessionChanged, listener)
+    return () => {
+      ipcRenderer.removeListener(TERMINAL_EVENT_CHANNELS.sessionChanged, listener)
+    }
+  }
+}
+
 const menuEvents = {
   onTriggerPickVault: (callback: () => void): (() => void) => {
     const listener = (): void => {
@@ -260,6 +349,7 @@ try {
   contextBridge.exposeInMainWorld('windowControls', windowControls)
   contextBridge.exposeInMainWorld('shortcuts', shortcuts)
   contextBridge.exposeInMainWorld('notes', notes)
+  contextBridge.exposeInMainWorld('terminals', terminals)
   contextBridge.exposeInMainWorld('ghostMode', ghostMode)
   contextBridge.exposeInMainWorld('contextMenu', contextMenu)
   contextBridge.exposeInMainWorld('menuEvents', menuEvents)

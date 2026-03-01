@@ -1,4 +1,4 @@
-import { Columns2, Maximize2, Minimize2, Plus, Trash2, X, type LucideIcon } from 'lucide-react'
+import { Columns2, Maximize2, Minimize2, Trash2, X, type LucideIcon } from 'lucide-react'
 import type { BottomPanelTab, BottomPanelStoreState } from '@/stores/bottom-panel-store'
 
 type BottomPanelToolbarTone = 'default' | 'danger'
@@ -20,18 +20,22 @@ type BuildViewActionsOptions = {
   paneId: string
   activeTab: BottomPanelTab | null
   api: BottomPanelToolbarApi
+  terminalApi?: {
+    splitRight: () => void
+    splitDown: () => void
+  }
 }
 
 type BuildGlobalActionsOptions = {
   isMaximized: boolean
-  onOpenAddViewMenu: () => void
   api: BottomPanelToolbarApi
 }
 
 export function buildViewToolbarActions({
   paneId,
   activeTab,
-  api
+  api,
+  terminalApi
 }: BuildViewActionsOptions): BottomPanelToolbarAction[] {
   if (!activeTab) return []
 
@@ -42,41 +46,34 @@ export function buildViewToolbarActions({
   if (activeTab.viewId === 'terminal') {
     return [
       {
-        id: 'new-terminal-session',
-        label: 'New Terminal Session',
-        icon: Plus,
-        onTrigger: () => {
-          api.openView('terminal', paneId, { allowDuplicate: true })
-        }
-      },
-      {
-        id: 'split-terminal-panel',
-        label: 'Split Terminal Panel',
+        id: 'split-terminal-right',
+        label: 'Split Right',
         icon: Columns2,
         onTrigger: () => {
+          if (terminalApi) {
+            terminalApi.splitRight()
+            return
+          }
           api.splitPane(paneId, 'row', 'terminal')
         }
       },
       {
-        id: 'close-terminal-tab',
-        label: 'Close Terminal Tab',
-        icon: Trash2,
-        onTrigger: closeActiveTab,
-        tone: 'danger'
+        id: 'split-terminal-down',
+        label: 'Split Down',
+        icon: Columns2,
+        onTrigger: () => {
+          if (terminalApi) {
+            terminalApi.splitDown()
+            return
+          }
+          api.splitPane(paneId, 'column', 'terminal')
+        }
       }
     ]
   }
 
   if (activeTab.viewId === 'problems') {
     return [
-      {
-        id: 'new-problems-view',
-        label: 'New Problems View',
-        icon: Plus,
-        onTrigger: () => {
-          api.openView('problems', paneId, { allowDuplicate: true })
-        }
-      },
       {
         id: 'split-problems-panel',
         label: 'Split Problems Panel',
@@ -97,14 +94,6 @@ export function buildViewToolbarActions({
 
   return [
     {
-      id: 'new-output-view',
-      label: 'New Output View',
-      icon: Plus,
-      onTrigger: () => {
-        api.openView('output', paneId, { allowDuplicate: true })
-      }
-    },
-    {
       id: 'split-output-panel',
       label: 'Split Output Panel',
       icon: Columns2,
@@ -124,16 +113,9 @@ export function buildViewToolbarActions({
 
 export function buildGlobalToolbarActions({
   isMaximized,
-  onOpenAddViewMenu,
   api
 }: BuildGlobalActionsOptions): BottomPanelToolbarAction[] {
   return [
-    {
-      id: 'add-panel-tab',
-      label: 'Add Panel Tab',
-      icon: Plus,
-      onTrigger: onOpenAddViewMenu
-    },
     {
       id: isMaximized ? 'restore-panel-size' : 'maximize-panel-size',
       label: isMaximized ? 'Restore Panel Size' : 'Expand Panel',

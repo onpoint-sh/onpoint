@@ -3,6 +3,7 @@ import { useDragLayer, useDrop } from 'react-dnd'
 import type { MosaicDirection } from 'react-mosaic-component'
 import { usePanesStore } from '@/stores/panes-store'
 import { useBottomPanelStore } from '@/stores/bottom-panel-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { getFileType } from '@/lib/file-types'
 import { BOTTOM_PANEL_TAB_DND_TYPE, type BottomPanelTabDragItem } from '@/lib/bottom-panel-dnd'
 import { createTerminalEditorPath, isTerminalEditorPath } from '@/lib/terminal-editor-tab'
@@ -100,6 +101,42 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
   const focusedPaneId = usePanesStore((s) => s.focusedPaneId)
   const focusRequestId = usePanesStore((s) => s.focusRequestsByPane[paneId] ?? 0)
   const consumeEditorFocusRequest = usePanesStore((s) => s.consumeEditorFocusRequest)
+  const ensureGroupForBottomPanelTab = useTerminalStore((s) => s.ensureGroupForBottomPanelTab)
+  const getSessionIdsForBottomPanelTab = useTerminalStore((s) => s.getSessionIdsForBottomPanelTab)
+  const attachEditorPathToSession = useTerminalStore((s) => s.attachEditorPathToSession)
+  const detachBottomPanelTab = useTerminalStore((s) => s.detachBottomPanelTab)
+
+  const moveBottomPanelTerminalTabToPane = useCallback(
+    async (item: BottomPanelTabDragItem, targetPaneId: string) => {
+      const bottomPanelState = useBottomPanelStore.getState()
+      const sourcePane = bottomPanelState.panes[item.paneId]
+      const sourceTab = sourcePane?.tabs.find((candidate) => candidate.id === item.tabId)
+      if (!sourceTab || sourceTab.viewId !== 'terminal') return
+
+      await ensureGroupForBottomPanelTab(item.tabId)
+      let sessionIds = getSessionIdsForBottomPanelTab(item.tabId)
+
+      if (sessionIds.length === 0) {
+        const createdSessionId = await useTerminalStore.getState().createSessionInGroup(item.tabId)
+        sessionIds = [createdSessionId]
+      }
+
+      for (const sessionId of sessionIds) {
+        const terminalPath = createTerminalEditorPath(sessionId)
+        attachEditorPathToSession(terminalPath, sessionId)
+        usePanesStore.getState().openTab(terminalPath, targetPaneId)
+      }
+
+      await detachBottomPanelTab(item.tabId)
+      bottomPanelState.closeTab(item.paneId, item.tabId)
+    },
+    [
+      attachEditorPathToSession,
+      detachBottomPanelTab,
+      ensureGroupForBottomPanelTab,
+      getSessionIdsForBottomPanelTab
+    ]
+  )
 
   // Detect if a tab drag is in progress (to enable edge drop zones)
   const isTabDragging = useDragLayer(
@@ -143,14 +180,9 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
       }
 
       if (itemType === BOTTOM_PANEL_TAB_DND_TYPE) {
-        const bottomPanelState = useBottomPanelStore.getState()
-        const sourcePane = bottomPanelState.panes[item.paneId]
-        const sourceTab = sourcePane?.tabs.find((candidate) => candidate.id === item.tabId)
-        if (!sourceTab || sourceTab.viewId !== 'terminal') return
-
-        const terminalPath = createTerminalEditorPath(sourceTab.id)
-        usePanesStore.getState().openTab(terminalPath, paneId)
-        bottomPanelState.closeTab(item.paneId, item.tabId)
+        void (async () => {
+          await moveBottomPanelTerminalTabToPane(item, paneId)
+        })()
       }
     },
     collect: (monitor) => ({
@@ -188,26 +220,20 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
         return
       }
 
-      const bottomPanelState = useBottomPanelStore.getState()
-      const sourcePane = bottomPanelState.panes[item.paneId]
-      const sourceTab = sourcePane?.tabs.find((candidate) => candidate.id === item.tabId)
-      if (!sourceTab || sourceTab.viewId !== 'terminal') return
+      void (async () => {
+        const newPaneId = usePanesStore.getState().splitPane(paneId, directionMap[position])
+        if (!newPaneId) return
 
-      const newPaneId = usePanesStore.getState().splitPane(paneId, directionMap[position])
-      if (!newPaneId) return
-
-      const panesState = usePanesStore.getState()
-      const newPane = panesState.panes[newPaneId]
-      const duplicatedTabId = newPane?.activeTabId ?? null
-      const terminalPath = createTerminalEditorPath(sourceTab.id)
-
-      panesState.openTab(terminalPath, newPaneId)
-      if (duplicatedTabId) {
-        panesState.closeTab(newPaneId, duplicatedTabId)
-      }
-      bottomPanelState.closeTab(item.paneId, item.tabId)
+        const panesState = usePanesStore.getState()
+        const newPane = panesState.panes[newPaneId]
+        const duplicatedTabId = newPane?.activeTabId ?? null
+        await moveBottomPanelTerminalTabToPane(item, newPaneId)
+        if (duplicatedTabId) {
+          panesState.closeTab(newPaneId, duplicatedTabId)
+        }
+      })()
     },
-    [paneId, splitPaneWithTab]
+    [moveBottomPanelTerminalTabToPane, paneId, splitPaneWithTab]
   )
 
   if (!pane) {
@@ -235,7 +261,13 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
       >
         {(() => {
           if (isTerminalEditorPath(relativePath)) {
-            return <TerminalPaneEditor key={activeTab?.id} relativePath={relativePath} />
+            return (
+              <TerminalPaneEditor
+                key={activeTab?.id}
+                tabId={activeTab?.id}
+                relativePath={relativePath}
+              />
+            )
           }
 
           const fileType = relativePath ? getFileType(relativePath) : 'markdown'

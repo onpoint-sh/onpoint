@@ -12,6 +12,7 @@ import { type SettingsSectionId } from '@/pages/settings-sections'
 import { ShortcutsSettingsPanel } from '@/shortcuts/shortcuts-settings-panel'
 import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { useThemeStore } from '@/stores/theme-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { LIGHT_THEMES, DARK_THEMES, type ThemeDefinition, type ThemeMode } from '@onpoint/themes'
 
 type SettingsPageProps = {
@@ -144,6 +145,9 @@ function SettingsPage({
 
   const iconThemeId = useIconThemeStore((s) => s.iconThemeId)
   const setIconTheme = useIconThemeStore((s) => s.setIconTheme)
+  const terminalSettings = useTerminalStore((s) => s.settings)
+  const initializeTerminalStore = useTerminalStore((s) => s.initialize)
+  const updateTerminalSettings = useTerminalStore((s) => s.updateSettings)
 
   useEffect(() => {
     if (section !== 'ghost-mode') return
@@ -151,6 +155,10 @@ function SettingsPage({
       setGhostOpacity(config.opacity)
     })
   }, [section])
+
+  useEffect(() => {
+    void initializeTerminalStore()
+  }, [initializeTerminalStore])
 
   const handleOpacityChange = (value: number): void => {
     setGhostOpacity(value)
@@ -271,6 +279,179 @@ function SettingsPage({
         <section className="settings-section scroll-mt-3 min-h-0 flex-1 flex flex-col">
           <h2 className="settings-section-title">Keyboard</h2>
           <ShortcutsSettingsPanel profile={profile} isLoading={isShortcutsLoading} />
+        </section>
+      ) : null}
+
+      {section === 'terminal' ? (
+        <section className="settings-section scroll-mt-3">
+          <h2 className="settings-section-title">Terminal</h2>
+          <article className="settings-section-card">
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Font family</p>
+                <p className="settings-row-description">
+                  Monospace stack used for terminal rendering.
+                </p>
+              </div>
+              <input
+                className="settings-text-input w-[22rem]"
+                value={terminalSettings.fontFamily}
+                onChange={(event) => {
+                  void updateTerminalSettings({ fontFamily: event.target.value })
+                }}
+              />
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Font size</p>
+                <p className="settings-row-description">Text size in terminal cells.</p>
+              </div>
+              <input
+                type="number"
+                min={10}
+                max={28}
+                value={terminalSettings.fontSize}
+                className="settings-number-input"
+                onChange={(event) => {
+                  void updateTerminalSettings({ fontSize: Number(event.target.value) })
+                }}
+              />
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Scrollback</p>
+                <p className="settings-row-description">
+                  Maximum buffered lines retained in memory.
+                </p>
+              </div>
+              <input
+                type="number"
+                min={1000}
+                max={100000}
+                value={terminalSettings.scrollback}
+                className="settings-number-input"
+                onChange={(event) => {
+                  void updateTerminalSettings({ scrollback: Number(event.target.value) })
+                }}
+              />
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Cursor style</p>
+                <p className="settings-row-description">Visual style of the terminal cursor.</p>
+              </div>
+              <select
+                className="settings-select-input"
+                value={terminalSettings.cursorStyle}
+                onChange={(event) => {
+                  void updateTerminalSettings({
+                    cursorStyle: event.target.value as typeof terminalSettings.cursorStyle
+                  })
+                }}
+              >
+                <option value="block">Block</option>
+                <option value="underline">Underline</option>
+                <option value="bar">Bar</option>
+              </select>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Renderer</p>
+                <p className="settings-row-description">
+                  Prefer automatic, canvas, or DOM renderer.
+                </p>
+              </div>
+              <select
+                className="settings-select-input"
+                value={terminalSettings.rendererType}
+                onChange={(event) => {
+                  void updateTerminalSettings({
+                    rendererType: event.target.value as typeof terminalSettings.rendererType
+                  })
+                }}
+              >
+                <option value="auto">Auto</option>
+                <option value="canvas">Canvas</option>
+                <option value="dom">DOM</option>
+              </select>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Bell style</p>
+                <p className="settings-row-description">
+                  How terminal bell events are represented.
+                </p>
+              </div>
+              <select
+                className="settings-select-input"
+                value={terminalSettings.bellStyle}
+                onChange={(event) => {
+                  void updateTerminalSettings({
+                    bellStyle: event.target.value as typeof terminalSettings.bellStyle
+                  })
+                }}
+              >
+                <option value="none">None</option>
+                <option value="sound">Sound</option>
+                <option value="visual">Visual</option>
+              </select>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Copy on select</p>
+                <p className="settings-row-description">
+                  Automatically copy selected terminal text to the clipboard.
+                </p>
+              </div>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={terminalSettings.copyOnSelect}
+                  onChange={(event) => {
+                    void updateTerminalSettings({ copyOnSelect: event.target.checked })
+                  }}
+                />
+                <span>{terminalSettings.copyOnSelect ? 'Enabled' : 'Disabled'}</span>
+              </label>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Default shell path</p>
+                <p className="settings-row-description">
+                  Optional override for shell executable (leave blank for system default).
+                </p>
+              </div>
+              <input
+                className="settings-text-input w-[22rem]"
+                value={terminalSettings.shellPath ?? ''}
+                placeholder="System default"
+                onChange={(event) => {
+                  const next = event.target.value.trim()
+                  void updateTerminalSettings({ shellPath: next.length > 0 ? next : null })
+                }}
+              />
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-main">
+                <p className="settings-row-title">Default shell args</p>
+                <p className="settings-row-description">
+                  Space-separated default arguments when creating terminal sessions.
+                </p>
+              </div>
+              <input
+                className="settings-text-input w-[22rem]"
+                value={terminalSettings.shellArgs.join(' ')}
+                placeholder="--login"
+                onChange={(event) => {
+                  const shellArgs = event.target.value
+                    .split(' ')
+                    .map((entry) => entry.trim())
+                    .filter((entry) => entry.length > 0)
+                  void updateTerminalSettings({ shellArgs })
+                }}
+              />
+            </div>
+          </article>
         </section>
       ) : null}
 

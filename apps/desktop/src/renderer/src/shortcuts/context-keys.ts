@@ -2,6 +2,7 @@ import { type ShortcutContextMap } from '@onpoint/shared/shortcut-when'
 import { getFileType, type FileType } from '@/lib/file-types'
 import { useLayoutStore } from '@/stores/layout-store'
 import { usePanesStore } from '@/stores/panes-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { isEditableTarget, isShortcutCaptureTarget } from './is-editable-target'
 
 type ShortcutContextOptions = {
@@ -44,6 +45,8 @@ export function buildShortcutContext(
   const searchInputFocus = hasClosest(target, '.search-palette-input')
   const settingsFocus = window.location.pathname.startsWith('/settings')
   const sidebarVisible = useLayoutStore.getState().isSidebarOpen
+  const terminalFocus = useTerminalStore.getState().isTerminalFocus
+  const terminalTextFocus = useTerminalStore.getState().isTerminalTextFocus
 
   return {
     windowFocus: document.hasFocus(),
@@ -57,7 +60,9 @@ export function buildShortcutContext(
     searchInputFocus,
     settingsFocus,
     sidebarVisible,
-    activeEditor
+    activeEditor,
+    terminalFocus,
+    terminalTextFocus
   }
 }
 

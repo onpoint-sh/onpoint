@@ -14,7 +14,8 @@
     "./notes": "./src/notes.ts",
     "./frontmatter": "./src/frontmatter.ts",
     "./window": "./src/window.ts",
-    "./ghost-mode": "./src/ghost-mode.ts"
+    "./ghost-mode": "./src/ghost-mode.ts",
+    "./terminal": "./src/terminal.ts"
   },
   "files": [
     "src"
