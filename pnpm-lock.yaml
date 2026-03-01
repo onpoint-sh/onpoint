@@ -63,6 +63,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^4.0.0
         version: 4.0.0(electron@39.7.0)
+      '@onpoint/icon-themes':
+        specifier: workspace:*
+        version: link:../../packages/icon-themes
       '@onpoint/notes-core':
         specifier: workspace:*
         version: link:../../packages/notes-core
@@ -196,6 +199,9 @@ importers:
       '@onpoint/app-preview':
         specifier: workspace:*
         version: link:../../packages/app-preview
+      '@onpoint/icon-themes':
+        specifier: workspace:*
+        version: link:../../packages/icon-themes
       '@onpoint/themes':
         specifier: workspace:*
         version: link:../../packages/themes
@@ -233,6 +239,9 @@ importers:
 
   packages/app-preview:
     dependencies:
+      '@onpoint/icon-themes':
+        specifier: workspace:*
+        version: link:../icon-themes
       '@onpoint/notes-core':
         specifier: workspace:*
         version: link:../notes-core
@@ -287,6 +296,12 @@ importers:
       zustand:
         specifier: ^5.0.8
         version: 5.0.11(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+
+  packages/icon-themes:
+    dependencies:
+      react:
+        specifier: ^19.0.0
+        version: 19.2.4
 
   packages/notes-core:
     dependencies:

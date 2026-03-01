@@ -4,17 +4,8 @@ import type { MockNote } from '@onpoint/app-preview'
 import '@onpoint/app-preview/styles/app-preview.css'
 import { LIGHT_THEMES, DARK_THEMES } from '@onpoint/themes'
 import type { ThemeDefinition } from '@onpoint/themes'
-import {
-  ChevronRight,
-  FileText,
-  Folder,
-  FolderOpen,
-  Search,
-  Settings,
-  FilePlus2,
-  FolderPlus,
-  PanelLeft
-} from 'lucide-react'
+import { DEFAULT_ICON_THEME_ID, loadIconTheme, useIconThemeAdapter } from '@onpoint/icon-themes'
+import { ChevronRight, Search, Settings, FilePlus2, FolderPlus, PanelLeft } from 'lucide-react'
 
 const CARD_HEIGHT = 420
 
@@ -201,6 +192,18 @@ function SidebarWindow({
   )
 }
 
+// ─── Themed Icon Helper ───
+
+function ThemedIcon({ svg, size = 13 }: { svg: string; size?: number }): React.JSX.Element {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center [&>svg]:size-full"
+      style={{ width: size, height: size }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  )
+}
+
 // ─── Interactive Tree ───
 
 type TreeItemData = {
@@ -217,19 +220,35 @@ function InteractiveTreeNode({
   activeId,
   onSelect,
   openFolders,
-  onToggleFolder
+  onToggleFolder,
+  iconAdapter
 }: {
   item: TreeItemData
   depth?: number
-  activeId?: string
-  onSelect?: (id: string) => void
+  activeId?: string | undefined
+  onSelect?: ((id: string) => void) | undefined
   openFolders: Set<string>
   onToggleFolder: (id: string) => void
+  iconAdapter:
+    | {
+        getFileIcon: (name: string) => string
+        getFolderIcon: (name: string, isOpen: boolean) => string
+      }
+    | undefined
 }): React.JSX.Element {
   const paddingLeft = depth * 20 + 12
   const isOpen = openFolders.has(item.id)
   const isActive = item.id === activeId
-  const Icon = item.isFolder ? (isOpen ? FolderOpen : Folder) : FileText
+
+  const icon = iconAdapter ? (
+    item.isFolder ? (
+      <ThemedIcon svg={iconAdapter.getFolderIcon(item.name, isOpen)} />
+    ) : (
+      <ThemedIcon svg={iconAdapter.getFileIcon(item.name + '.md')} />
+    )
+  ) : (
+    <span className="inline-flex size-[13px] shrink-0" />
+  )
 
   return (
     <>
@@ -272,7 +291,7 @@ function InteractiveTreeNode({
         ) : (
           <span className="inline-flex w-4 shrink-0" />
         )}
-        <Icon style={{ width: 13, height: 13, flexShrink: 0, color: 'var(--muted-foreground)' }} />
+        {icon}
         <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
           {item.name}
         </span>
@@ -287,6 +306,7 @@ function InteractiveTreeNode({
             onSelect={onSelect}
             openFolders={openFolders}
             onToggleFolder={onToggleFolder}
+            iconAdapter={iconAdapter}
           />
         ))}
     </>
@@ -530,6 +550,18 @@ function InteractiveSearch(): React.JSX.Element {
 // ─── Present Demo (Ghost Mode) ───
 
 export function PresentDemo(): React.JSX.Element {
+  const adapter = useIconThemeAdapter(DEFAULT_ICON_THEME_ID)
+
+  useEffect(() => {
+    void loadIconTheme(DEFAULT_ICON_THEME_ID)
+  }, [])
+
+  const fileIcon = adapter ? (
+    <ThemedIcon svg={adapter.getFileIcon('Acme Demo Script.md')} />
+  ) : (
+    <span className="inline-flex size-[13px] shrink-0" />
+  )
+
   return (
     <DesktopShell wallpaper="/wallpaper-goldengate.webp" stretch>
       <AppWindow style={{ opacity: 0.7 }}>
@@ -557,27 +589,21 @@ export function PresentDemo(): React.JSX.Element {
                 }}
               >
                 <span className="inline-flex w-4 shrink-0" />
-                <FileText
-                  style={{ width: 13, height: 13, flexShrink: 0, color: 'var(--muted-foreground)' }}
-                />
+                {fileIcon}
                 <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
                   Acme Demo Script
                 </span>
               </div>
               <div className="flex h-7 items-center gap-[5px] pr-2" style={{ paddingLeft: 12 }}>
                 <span className="inline-flex w-4 shrink-0" />
-                <FileText
-                  style={{ width: 13, height: 13, flexShrink: 0, color: 'var(--muted-foreground)' }}
-                />
+                {fileIcon}
                 <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
                   Objection Handling
                 </span>
               </div>
               <div className="flex h-7 items-center gap-[5px] pr-2" style={{ paddingLeft: 12 }}>
                 <span className="inline-flex w-4 shrink-0" />
-                <FileText
-                  style={{ width: 13, height: 13, flexShrink: 0, color: 'var(--muted-foreground)' }}
-                />
+                {fileIcon}
                 <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
                   Pricing Tiers
                 </span>
@@ -590,13 +616,16 @@ export function PresentDemo(): React.JSX.Element {
               style={{ borderColor: 'var(--border)', background: 'var(--muted)' }}
             >
               <div
-                className="flex h-full items-center border-b-2 px-2.5 text-[0.72rem] font-medium"
+                className="flex h-full items-center gap-1.5 border-b-2 px-2.5 text-[0.72rem] font-medium"
                 style={{
                   color: 'var(--foreground)',
                   borderColor: 'var(--primary)',
                   background: 'var(--background)'
                 }}
               >
+                {adapter && (
+                  <ThemedIcon svg={adapter.getFileIcon('Acme Demo Script.md')} size={11} />
+                )}
                 Acme Demo Script
               </div>
             </div>
@@ -811,6 +840,11 @@ export function OrganizeDemo(): React.JSX.Element {
   const [tree, setTree] = useState(ORGANIZE_TREE)
   const { openFolders, toggleFolder } = useTree(tree)
   const [activeId, setActiveId] = useState<string | undefined>(undefined)
+  const adapter = useIconThemeAdapter(DEFAULT_ICON_THEME_ID)
+
+  useEffect(() => {
+    void loadIconTheme(DEFAULT_ICON_THEME_ID)
+  }, [])
 
   const addFile = useCallback(() => {
     counter++
@@ -842,6 +876,7 @@ export function OrganizeDemo(): React.JSX.Element {
               onSelect={setActiveId}
               openFolders={openFolders}
               onToggleFolder={toggleFolder}
+              iconAdapter={adapter}
             />
           ))}
         </div>
@@ -1287,6 +1322,11 @@ function ThemePicker({
 
 export function CrossPlatformDemo(): React.JSX.Element {
   const [theme, setTheme] = useState<ThemeDefinition>(LIGHT_THEMES[0])
+  const adapter = useIconThemeAdapter(DEFAULT_ICON_THEME_ID)
+
+  useEffect(() => {
+    void loadIconTheme(DEFAULT_ICON_THEME_ID)
+  }, [])
 
   const themeVars = useMemo(() => {
     const s: Record<string, string> = {}
@@ -1377,14 +1417,11 @@ export function CrossPlatformDemo(): React.JSX.Element {
                     }}
                   >
                     <span className="inline-flex w-4 shrink-0" />
-                    <FileText
-                      style={{
-                        width: 13,
-                        height: 13,
-                        flexShrink: 0,
-                        color: 'var(--muted-foreground)'
-                      }}
-                    />
+                    {adapter ? (
+                      <ThemedIcon svg={adapter.getFileIcon('Getting Started.md')} />
+                    ) : (
+                      <span className="inline-flex size-[13px] shrink-0" />
+                    )}
                     <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
                       Getting Started
                     </span>
@@ -1400,28 +1437,22 @@ export function CrossPlatformDemo(): React.JSX.Element {
                         }}
                       />
                     </span>
-                    <FolderOpen
-                      style={{
-                        width: 13,
-                        height: 13,
-                        flexShrink: 0,
-                        color: 'var(--muted-foreground)'
-                      }}
-                    />
+                    {adapter ? (
+                      <ThemedIcon svg={adapter.getFolderIcon('Projects', true)} />
+                    ) : (
+                      <span className="inline-flex size-[13px] shrink-0" />
+                    )}
                     <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
                       Projects
                     </span>
                   </div>
                   <div className="flex h-7 items-center gap-[5px] pr-2" style={{ paddingLeft: 32 }}>
                     <span className="inline-flex w-4 shrink-0" />
-                    <FileText
-                      style={{
-                        width: 13,
-                        height: 13,
-                        flexShrink: 0,
-                        color: 'var(--muted-foreground)'
-                      }}
-                    />
+                    {adapter ? (
+                      <ThemedIcon svg={adapter.getFileIcon('Setup Guide.md')} />
+                    ) : (
+                      <span className="inline-flex size-[13px] shrink-0" />
+                    )}
                     <span className="truncate font-medium" style={{ color: 'var(--foreground)' }}>
                       Setup Guide
                     </span>
@@ -1441,7 +1472,7 @@ export function CrossPlatformDemo(): React.JSX.Element {
                   }}
                 >
                   <div
-                    className="flex h-full items-center border-b-2 px-2.5 text-[0.72rem] font-medium"
+                    className="flex h-full items-center gap-1.5 border-b-2 px-2.5 text-[0.72rem] font-medium"
                     style={{
                       color: 'var(--foreground)',
                       borderColor: 'var(--primary)',
@@ -1449,6 +1480,9 @@ export function CrossPlatformDemo(): React.JSX.Element {
                       transition: 'background 0.3s, border-color 0.3s, color 0.3s'
                     }}
                   >
+                    {adapter && (
+                      <ThemedIcon svg={adapter.getFileIcon('Getting Started.md')} size={11} />
+                    )}
                     Getting Started
                   </div>
                 </div>

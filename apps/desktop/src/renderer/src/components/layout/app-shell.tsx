@@ -1,6 +1,7 @@
 import { SidebarLayout } from './sidebar-layout'
 import { WindowFrame } from './window-frame'
 import { CustomTitleBar } from '@/components/window/custom-title-bar'
+import { useIconTheme } from '@/hooks/use-icon-theme'
 import { useTheme } from '@/hooks/use-theme'
 import { useTitlebarZoomCompensation } from '@/hooks/use-titlebar-zoom-compensation'
 import { useLayoutStore } from '@/stores/layout-store'
@@ -13,8 +14,14 @@ type AppShellProps = {
   isGhostMode?: boolean
 }
 
-function AppShell({ children, sidebarContent, onOpenSearch, isGhostMode = false }: AppShellProps): React.JSX.Element {
+function AppShell({
+  children,
+  sidebarContent,
+  onOpenSearch,
+  isGhostMode = false
+}: AppShellProps): React.JSX.Element {
   useTheme()
+  useIconTheme()
   useTitlebarZoomCompensation()
 
   const hasSidebar = sidebarContent !== undefined

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
 import { X, Pin } from 'lucide-react'
+import { useIconThemeAdapter } from '@onpoint/icon-themes'
 import { isUntitledPath } from '@onpoint/shared/notes'
+import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { usePanesStore, findAdjacentPaneId } from '@/stores/panes-store'
 import { useNotesStore } from '@/stores/notes-store'
 
@@ -26,6 +28,7 @@ function DraggableTab({
   isDirty,
   isPinned,
   label,
+  fileIconSvg,
   onClick,
   onMouseDown,
   onContextMenu,
@@ -39,6 +42,7 @@ function DraggableTab({
   isDirty: boolean
   isPinned: boolean
   label: string
+  fileIconSvg: string | undefined
   onClick: () => void
   onMouseDown: (e: React.MouseEvent) => void
   onContextMenu: (e: React.MouseEvent) => void
@@ -101,6 +105,12 @@ function DraggableTab({
       onContextMenu={onContextMenu}
     >
       {isPinned && <Pin className="pane-tab-bar-tab-pin size-3" />}
+      {fileIconSvg && (
+        <span
+          className="inline-flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-full"
+          dangerouslySetInnerHTML={{ __html: fileIconSvg }}
+        />
+      )}
       <span className="pane-tab-bar-tab-label">{label}</span>
       <span className="pane-tab-bar-tab-dirty-dot" />
       <button className="pane-tab-bar-tab-close" onClick={onClose} tabIndex={-1}>
@@ -124,6 +134,8 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   const unpinTab = usePanesStore((s) => s.unpinTab)
   const requestCloseTab = usePanesStore((s) => s.requestCloseTab)
   const notes = useNotesStore((s) => s.notes)
+  const iconThemeId = useIconThemeStore((s) => s.iconThemeId)
+  const iconAdapter = useIconThemeAdapter(iconThemeId)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -406,23 +418,27 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
         onDoubleClick={handleDoubleClick}
         onScroll={handleScroll}
       >
-        {pane.tabs.map((tab, index) => (
-          <DraggableTab
-            key={tab.id}
-            tabId={tab.id}
-            paneId={paneId}
-            index={index}
-            relativePath={tab.relativePath}
-            isActive={tab.id === pane.activeTabId}
-            isDirty={Boolean(dirtyTabs[tab.id])}
-            isPinned={Boolean(tab.pinned)}
-            label={resolveTitle(tab.relativePath)}
-            onClick={() => handleTabClick(tab.id)}
-            onMouseDown={(e) => handleMouseDown(e, tab.id)}
-            onContextMenu={(e) => handleContextMenu(e, tab.id)}
-            onClose={(e) => handleTabClose(e, tab.id)}
-          />
-        ))}
+        {pane.tabs.map((tab, index) => {
+          const fileName = tab.relativePath.split('/').pop() ?? tab.relativePath
+          return (
+            <DraggableTab
+              key={tab.id}
+              tabId={tab.id}
+              paneId={paneId}
+              index={index}
+              relativePath={tab.relativePath}
+              isActive={tab.id === pane.activeTabId}
+              isDirty={Boolean(dirtyTabs[tab.id])}
+              isPinned={Boolean(tab.pinned)}
+              label={resolveTitle(tab.relativePath)}
+              fileIconSvg={iconAdapter?.getFileIcon(fileName)}
+              onClick={() => handleTabClick(tab.id)}
+              onMouseDown={(e) => handleMouseDown(e, tab.id)}
+              onContextMenu={(e) => handleContextMenu(e, tab.id)}
+              onClose={(e) => handleTabClose(e, tab.id)}
+            />
+          )
+        })}
       </div>
     </div>
   )

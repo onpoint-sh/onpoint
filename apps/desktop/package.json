@@ -23,6 +23,7 @@
     "build:linux": "pnpm --filter @onpoint/cli build:sea && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
+    "@onpoint/icon-themes": "workspace:*",
     "@onpoint/notes-core": "workspace:*",
     "@onpoint/shared": "workspace:*",
     "@onpoint/themes": "workspace:*",

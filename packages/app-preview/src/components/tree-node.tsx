@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NodeRendererProps } from 'react-arborist'
-import { ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { DEFAULT_ICON_THEME_ID, loadIconTheme, useIconThemeAdapter } from '@onpoint/icon-themes'
 import type { NoteTreeNode } from '@onpoint/notes-core/notes-tree'
 import { usePreviewStore } from '../store'
 
@@ -12,6 +13,10 @@ export function markAsJustCreated(id: string): void {
   justCreatedIds.add(id)
 }
 
+function ThemedIcon({ svg, className }: { svg: string; className?: string }): React.JSX.Element {
+  return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
 export function TreeNodeRenderer({
   node,
   style,
@@ -20,6 +25,11 @@ export function TreeNodeRenderer({
   const openTab = usePreviewStore((s) => s.openTab)
   const panes = usePreviewStore((s) => s.panes)
   const focusedPaneId = usePreviewStore((s) => s.focusedPaneId)
+  const adapter = useIconThemeAdapter(DEFAULT_ICON_THEME_ID)
+
+  useEffect(() => {
+    void loadIconTheme(DEFAULT_ICON_THEME_ID)
+  }, [])
 
   const isNewNode = justCreatedIds.has(node.id)
   const [editValue, setEditValue] = useState(isNewNode ? '' : node.data.name)
@@ -44,6 +54,28 @@ export function TreeNodeRenderer({
     return false
   })()
 
+  const fileName = node.data.relativePath.split('/').pop() ?? node.data.relativePath
+  const folderName = node.data.relativePath.split('/').pop() ?? node.data.relativePath
+
+  const fileIcon = adapter ? (
+    <ThemedIcon
+      svg={adapter.getFileIcon(fileName)}
+      className="preview-tree-node-icon [&>svg]:size-full"
+    />
+  ) : (
+    <span className="preview-tree-node-icon" />
+  )
+
+  const renderFolderIcon = (isOpen: boolean): React.JSX.Element =>
+    adapter ? (
+      <ThemedIcon
+        svg={adapter.getFolderIcon(folderName, isOpen)}
+        className="preview-tree-node-icon [&>svg]:size-full"
+      />
+    ) : (
+      <span className="preview-tree-node-icon" />
+    )
+
   if (node.isEditing) {
     return (
       <div className="preview-tree-node">
@@ -51,14 +83,14 @@ export function TreeNodeRenderer({
           {node.isLeaf ? (
             <>
               <span className="preview-tree-node-chevron-space" />
-              <FileText className="preview-tree-node-icon" />
+              {fileIcon}
             </>
           ) : (
             <>
               <span className="preview-tree-node-chevron">
                 <ChevronRight className="preview-tree-node-chevron-icon" />
               </span>
-              <Folder className="preview-tree-node-icon" />
+              {renderFolderIcon(false)}
             </>
           )}
           <input
@@ -102,7 +134,7 @@ export function TreeNodeRenderer({
         {node.data.isNote ? (
           <>
             <span className="preview-tree-node-chevron-space" />
-            <FileText className="preview-tree-node-icon" />
+            {fileIcon}
           </>
         ) : (
           <>
@@ -111,11 +143,7 @@ export function TreeNodeRenderer({
                 className={`preview-tree-node-chevron-icon ${node.isOpen ? 'is-open' : ''}`}
               />
             </span>
-            {node.isOpen ? (
-              <FolderOpen className="preview-tree-node-icon" />
-            ) : (
-              <Folder className="preview-tree-node-icon" />
-            )}
+            {renderFolderIcon(node.isOpen)}
           </>
         )}
         <span className="preview-tree-node-label">{node.data.name}</span>

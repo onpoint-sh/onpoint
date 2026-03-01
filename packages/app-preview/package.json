@@ -16,6 +16,7 @@
     "react-dom": "^19.0.0"
   },
   "dependencies": {
+    "@onpoint/icon-themes": "workspace:*",
     "@onpoint/notes-core": "workspace:*",
     "@onpoint/shared": "workspace:*",
     "@tiptap/extension-code-block-lowlight": "^3.20.0",

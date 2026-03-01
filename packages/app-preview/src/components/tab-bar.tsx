@@ -1,6 +1,7 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
 import { X } from 'lucide-react'
+import { DEFAULT_ICON_THEME_ID, loadIconTheme, useIconThemeAdapter } from '@onpoint/icon-themes'
 import { usePreviewStore } from '../store'
 import { useAppPreview } from '../context'
 
@@ -18,6 +19,7 @@ function DraggableTab({
   index,
   isActive,
   label,
+  fileIconSvg,
   onClick,
   onMouseDown,
   onClose
@@ -27,6 +29,7 @@ function DraggableTab({
   index: number
   isActive: boolean
   label: string
+  fileIconSvg: string | undefined
   onClick: () => void
   onMouseDown: (e: React.MouseEvent) => void
   onClose: (e: React.MouseEvent) => void
@@ -72,6 +75,9 @@ function DraggableTab({
       onClick={onClick}
       onMouseDown={onMouseDown}
     >
+      {fileIconSvg && (
+        <span className="pane-tab-bar-tab-icon" dangerouslySetInnerHTML={{ __html: fileIconSvg }} />
+      )}
       <span className="pane-tab-bar-tab-label">{label}</span>
       <button className="pane-tab-bar-tab-close" onClick={onClose} tabIndex={-1}>
         <X className="pane-tab-bar-close-x size-3" />
@@ -91,6 +97,11 @@ export function TabBar({ paneId }: TabBarProps): React.JSX.Element {
   const moveTabToPane = usePreviewStore((s) => s.moveTabToPane)
   const setFocusedPane = usePreviewStore((s) => s.setFocusedPane)
   const { notes } = useAppPreview()
+  const adapter = useIconThemeAdapter(DEFAULT_ICON_THEME_ID)
+
+  useEffect(() => {
+    void loadIconTheme(DEFAULT_ICON_THEME_ID)
+  }, [])
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const tabBarRef = useRef<HTMLDivElement>(null)
@@ -211,19 +222,23 @@ export function TabBar({ paneId }: TabBarProps): React.JSX.Element {
         className="pane-tab-bar-scroll"
         onScroll={handleScroll}
       >
-        {pane.tabs.map((tab, index) => (
-          <DraggableTab
-            key={tab.id}
-            tabId={tab.id}
-            paneId={paneId}
-            index={index}
-            isActive={tab.id === pane.activeTabId}
-            label={resolveTitle(tab.relativePath)}
-            onClick={() => handleTabClick(tab.id)}
-            onMouseDown={(e) => handleMouseDown(e, tab.id)}
-            onClose={(e) => handleTabClose(e, tab.id)}
-          />
-        ))}
+        {pane.tabs.map((tab, index) => {
+          const fileName = tab.relativePath.split('/').pop() ?? tab.relativePath
+          return (
+            <DraggableTab
+              key={tab.id}
+              tabId={tab.id}
+              paneId={paneId}
+              index={index}
+              isActive={tab.id === pane.activeTabId}
+              label={resolveTitle(tab.relativePath)}
+              fileIconSvg={adapter?.getFileIcon(fileName)}
+              onClick={() => handleTabClick(tab.id)}
+              onMouseDown={(e) => handleMouseDown(e, tab.id)}
+              onClose={(e) => handleTabClose(e, tab.id)}
+            />
+          )
+        })}
       </div>
     </div>
   )

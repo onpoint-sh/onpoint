@@ -7,15 +7,12 @@ import {
   GHOST_MODE_OPACITY_MAX,
   GHOST_MODE_OPACITY_STEP
 } from '@onpoint/shared/ghost-mode'
+import { ICON_THEMES, useIconThemeAdapter, type IconThemeDefinition } from '@onpoint/icon-themes'
 import { type SettingsSectionId } from '@/pages/settings-sections'
 import { ShortcutsSettingsPanel } from '@/shortcuts/shortcuts-settings-panel'
+import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { useThemeStore } from '@/stores/theme-store'
-import {
-  LIGHT_THEMES,
-  DARK_THEMES,
-  type ThemeDefinition,
-  type ThemeMode
-} from '@onpoint/themes'
+import { LIGHT_THEMES, DARK_THEMES, type ThemeDefinition, type ThemeMode } from '@onpoint/themes'
 
 type SettingsPageProps = {
   section: SettingsSectionId
@@ -23,13 +20,25 @@ type SettingsPageProps = {
   isShortcutsLoading: boolean
 }
 
-const MODE_OPTIONS: { value: ThemeMode; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const MODE_OPTIONS: {
+  value: ThemeMode
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+}[] = [
   { value: 'auto', label: 'Auto', icon: Monitor },
   { value: 'light', label: 'Light', icon: Sun },
   { value: 'dark', label: 'Dark', icon: Moon }
 ]
 
-function ThemeSwatch({ theme, selected, onClick }: { theme: ThemeDefinition; selected: boolean; onClick: () => void }): React.JSX.Element {
+function ThemeSwatch({
+  theme,
+  selected,
+  onClick
+}: {
+  theme: ThemeDefinition
+  selected: boolean
+  onClick: () => void
+}): React.JSX.Element {
   const colors = theme.colors
   const previewColors = [
     colors.background,
@@ -45,13 +54,14 @@ function ThemeSwatch({ theme, selected, onClick }: { theme: ThemeDefinition; sel
       onClick={onClick}
       className="group relative flex w-full items-center gap-3 rounded-[0.55rem] border px-3 py-2.5 text-left text-[0.82rem] transition-[border-color] duration-100"
       style={{
-        borderColor: selected
-          ? 'var(--ring)'
-          : 'var(--border)',
+        borderColor: selected ? 'var(--ring)' : 'var(--border)',
         background: 'transparent'
       }}
     >
-      <span className="flex shrink-0 overflow-hidden rounded-full" style={{ height: '1.5rem', width: '3.75rem' }}>
+      <span
+        className="flex shrink-0 overflow-hidden rounded-full"
+        style={{ height: '1.5rem', width: '3.75rem' }}
+      >
         {previewColors.map((color, i) => (
           <span
             key={i}
@@ -60,12 +70,60 @@ function ThemeSwatch({ theme, selected, onClick }: { theme: ThemeDefinition; sel
           />
         ))}
       </span>
-      <span className="flex-1 font-[510]" style={{ color: 'color-mix(in oklch, var(--foreground) 95%, transparent)' }}>
+      <span
+        className="flex-1 font-[510]"
+        style={{ color: 'color-mix(in oklch, var(--foreground) 95%, transparent)' }}
+      >
         {theme.name}
       </span>
-      {selected ? (
-        <Check className="size-3.5 shrink-0" style={{ color: 'var(--ring)' }} />
-      ) : null}
+      {selected ? <Check className="size-3.5 shrink-0" style={{ color: 'var(--ring)' }} /> : null}
+    </button>
+  )
+}
+
+const ICON_THEME_PREVIEW_FILES = ['readme.md', 'index.ts', 'styles.css', 'package.json']
+
+function IconThemeSwatch({
+  theme,
+  selected,
+  onClick
+}: {
+  theme: IconThemeDefinition
+  selected: boolean
+  onClick: () => void
+}): React.JSX.Element {
+  const adapter = useIconThemeAdapter(theme.id)
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group relative flex w-full items-center gap-3 rounded-[0.55rem] border px-3 py-2.5 text-left text-[0.82rem] transition-[border-color] duration-100"
+      style={{
+        borderColor: selected ? 'var(--ring)' : 'var(--border)',
+        background: 'transparent'
+      }}
+    >
+      <span className="flex shrink-0 items-center gap-1.5">
+        {adapter ? (
+          ICON_THEME_PREVIEW_FILES.map((file) => (
+            <span
+              key={file}
+              className="inline-flex size-4 items-center justify-center [&>svg]:size-full"
+              dangerouslySetInnerHTML={{ __html: adapter.getFileIcon(file) }}
+            />
+          ))
+        ) : (
+          <span className="inline-flex" style={{ width: '5.5rem', height: '1rem' }} />
+        )}
+      </span>
+      <span
+        className="flex-1 font-[510]"
+        style={{ color: 'color-mix(in oklch, var(--foreground) 95%, transparent)' }}
+      >
+        {theme.name}
+      </span>
+      {selected ? <Check className="size-3.5 shrink-0" style={{ color: 'var(--ring)' }} /> : null}
     </button>
   )
 }
@@ -83,6 +141,9 @@ function SettingsPage({
   const setMode = useThemeStore((s) => s.setMode)
   const setLightTheme = useThemeStore((s) => s.setLightTheme)
   const setDarkTheme = useThemeStore((s) => s.setDarkTheme)
+
+  const iconThemeId = useIconThemeStore((s) => s.iconThemeId)
+  const setIconTheme = useIconThemeStore((s) => s.setIconTheme)
 
   useEffect(() => {
     if (section !== 'ghost-mode') return
@@ -127,10 +188,14 @@ function SettingsPage({
                       type="button"
                       onClick={() => setMode(opt.value)}
                       className="settings-pill-button flex items-center gap-1.5"
-                      style={active ? {
-                        borderColor: 'color-mix(in oklch, var(--ring) 55%, var(--border))',
-                        background: 'color-mix(in oklch, var(--ring) 12%, var(--background))'
-                      } : undefined}
+                      style={
+                        active
+                          ? {
+                              borderColor: 'color-mix(in oklch, var(--ring) 55%, var(--border))',
+                              background: 'color-mix(in oklch, var(--ring) 12%, var(--background))'
+                            }
+                          : undefined
+                      }
                     >
                       <Icon className="size-3.5" />
                       {opt.label}
@@ -143,7 +208,10 @@ function SettingsPage({
 
           {showLightPicker ? (
             <>
-              <h3 className="mt-3 text-[0.95rem] font-[600]" style={{ color: 'color-mix(in oklch, var(--foreground) 90%, transparent)' }}>
+              <h3
+                className="mt-3 text-[0.95rem] font-[600]"
+                style={{ color: 'color-mix(in oklch, var(--foreground) 90%, transparent)' }}
+              >
                 Light theme
               </h3>
               <div className="grid grid-cols-2 gap-2">
@@ -161,7 +229,10 @@ function SettingsPage({
 
           {showDarkPicker ? (
             <>
-              <h3 className="mt-3 text-[0.95rem] font-[600]" style={{ color: 'color-mix(in oklch, var(--foreground) 90%, transparent)' }}>
+              <h3
+                className="mt-3 text-[0.95rem] font-[600]"
+                style={{ color: 'color-mix(in oklch, var(--foreground) 90%, transparent)' }}
+              >
                 Dark theme
               </h3>
               <div className="grid grid-cols-2 gap-2">
@@ -176,6 +247,23 @@ function SettingsPage({
               </div>
             </>
           ) : null}
+
+          <h3
+            className="mt-3 text-[0.95rem] font-[600]"
+            style={{ color: 'color-mix(in oklch, var(--foreground) 90%, transparent)' }}
+          >
+            File icons
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {ICON_THEMES.map((theme) => (
+              <IconThemeSwatch
+                key={theme.id}
+                theme={theme}
+                selected={iconThemeId === theme.id}
+                onClick={() => setIconTheme(theme.id)}
+              />
+            ))}
+          </div>
         </section>
       ) : null}
 

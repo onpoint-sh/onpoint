@@ -14,6 +14,7 @@
     "@astrojs/react": "^4.3.0",
     "@astrojs/sitemap": "^3.3.0",
     "@onpoint/app-preview": "workspace:*",
+    "@onpoint/icon-themes": "workspace:*",
     "@onpoint/themes": "workspace:*",
     "@onpoint/ui": "workspace:*",
     "astro": "^5.9.0",
