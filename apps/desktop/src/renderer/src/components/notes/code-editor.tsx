@@ -24,7 +24,7 @@ function CodeEditor({
     usePaneContent(relativePath)
   const markTabDirty = usePanesStore((s) => s.markTabDirty)
   const markTabClean = usePanesStore((s) => s.markTabClean)
-  const monacoTheme = useMonacoTheme()
+  const { monacoTheme, applyMonacoTheme } = useMonacoTheme()
 
   const relativePathRef = useRef(relativePath)
   const savingAsRef = useRef(false)
@@ -117,8 +117,6 @@ function CodeEditor({
     [setContent]
   )
 
-  const fileName = relativePath?.split('/').pop() ?? 'file.txt'
-
   if (!relativePath) {
     return (
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
@@ -139,10 +137,14 @@ function CodeEditor({
 
       <div className="min-h-0 flex-1">
         <Editor
-          path={fileName}
+          path={relativePath}
           value={content}
           onChange={handleEditorChange}
           theme={monacoTheme}
+          beforeMount={applyMonacoTheme}
+          onMount={(_, monacoApi) => {
+            applyMonacoTheme(monacoApi)
+          }}
           options={{
             minimap: { enabled: false },
             fontSize: 13,

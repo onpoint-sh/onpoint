@@ -22,12 +22,27 @@ function getSystemIsDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
+function subscribeToThemeClass(callback: () => void): () => void {
+  const observer = new MutationObserver(callback)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class']
+  })
+  return () => observer.disconnect()
+}
+
+function getThemeClassIsDark(): boolean {
+  return document.documentElement.classList.contains('dark')
+}
+
 function useIsDark(): boolean {
-  const mode = useThemeStore((s) => s.mode)
-  const systemIsDark = useSyncExternalStore(subscribeToSystemTheme, getSystemIsDark)
-  if (mode === 'dark') return true
-  if (mode === 'light') return false
-  return systemIsDark
+  // Keep subscriptions so system/theme mode transitions also trigger rerenders.
+  useThemeStore((s) => s.mode)
+  useThemeStore((s) => s.lightThemeId)
+  useThemeStore((s) => s.darkThemeId)
+  useSyncExternalStore(subscribeToSystemTheme, getSystemIsDark)
+
+  return useSyncExternalStore(subscribeToThemeClass, getThemeClassIsDark, getThemeClassIsDark)
 }
 
 const MIN_SCALE = 0.1
@@ -52,7 +67,7 @@ function MermaidEditor({
     usePaneContent(relativePath)
   const markTabDirty = usePanesStore((s) => s.markTabDirty)
   const markTabClean = usePanesStore((s) => s.markTabClean)
-  const monacoTheme = useMonacoTheme()
+  const { monacoTheme, applyMonacoTheme } = useMonacoTheme()
   const isDark = useIsDark()
 
   const [viewMode, setViewMode] = useState<ViewMode>('code')
@@ -393,10 +408,15 @@ function MermaidEditor({
       <div className="min-h-0 flex-1">
         {viewMode === 'code' ? (
           <Editor
+            path={relativePath}
             defaultLanguage="markdown"
             value={content}
             onChange={handleEditorChange}
             theme={monacoTheme}
+            beforeMount={applyMonacoTheme}
+            onMount={(_, monacoApi) => {
+              applyMonacoTheme(monacoApi)
+            }}
             options={{
               minimap: { enabled: false },
               fontSize: 13,

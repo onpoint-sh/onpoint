@@ -156,7 +156,7 @@ function NoteTreeNodeRenderer({
             {folderIcon(node.isOpen)}
           </>
         )}
-        <span className="truncate font-[520] text-sidebar-foreground">
+        <span className="truncate font-normal text-sidebar-foreground">
           {node.data.isNote
             ? `${node.data.name}${getFileExtension(node.data.relativePath)}`
             : node.data.name}

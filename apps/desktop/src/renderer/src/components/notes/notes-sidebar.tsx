@@ -604,7 +604,7 @@ function NotesSidebar(): React.JSX.Element {
                           <ChevronRight className="size-3.5 rotate-90 text-muted-foreground" />
                         </span>
                         <FolderOpen className="size-[14px] shrink-0 text-muted-foreground" />
-                        <span className="truncate font-[520] text-sidebar-foreground">
+                        <span className="truncate font-normal text-sidebar-foreground">
                           {row.name}
                         </span>
                       </div>
