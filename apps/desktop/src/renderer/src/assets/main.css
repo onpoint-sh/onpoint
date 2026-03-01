@@ -972,7 +972,7 @@ body.sidebar-resizing {
   min-height: 0;
   height: 33px;
   flex-shrink: 0;
-  background: var(--sidebar);
+  background: var(--muted);
   border-bottom: 1px solid var(--border);
 }
 
@@ -982,7 +982,7 @@ body.sidebar-resizing {
   bottom: 0;
   left: 0;
   height: 4px;
-  background: color-mix(in oklch, var(--sidebar-foreground) 25%, transparent);
+  background: color-mix(in oklch, var(--foreground) 25%, transparent);
   border-radius: 2px;
   opacity: 0;
   transition: opacity 0.3s;
@@ -1028,18 +1028,33 @@ body.sidebar-resizing {
 }
 
 .pane-tab-bar-tab:hover {
-  background: color-mix(in oklch, var(--sidebar-foreground) 5%, var(--sidebar));
-  color: var(--sidebar-foreground);
+  background: color-mix(in oklch, var(--foreground) 8%, var(--muted));
+  color: var(--foreground);
 }
 
 .pane-tab-bar-tab[data-active='true'] {
-  color: var(--sidebar-foreground);
-  border-bottom-color: var(--primary);
+  color: var(--foreground);
+  border-bottom-color: var(--ring);
   background: var(--background);
 }
 
 .pane-tab-bar-tab[data-dragging='true'] {
   opacity: 0.5;
+}
+
+.pane-tab-bar-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.pane-tab-bar-tab-icon > svg {
+  width: 100%;
+  height: 100%;
 }
 
 .pane-tab-bar-tab-label {
@@ -1108,8 +1123,8 @@ body.sidebar-resizing {
 }
 
 .pane-tab-bar-tab-close:hover {
-  background: color-mix(in oklch, var(--sidebar-foreground) 12%, transparent);
-  color: var(--sidebar-foreground);
+  background: color-mix(in oklch, var(--foreground) 12%, var(--muted));
+  color: var(--foreground);
 }
 
 /* ── Pinned tabs ── */

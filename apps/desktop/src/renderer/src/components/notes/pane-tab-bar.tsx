@@ -107,10 +107,7 @@ function DraggableTab({
     >
       {isPinned && <Pin className="pane-tab-bar-tab-pin size-3" />}
       {fileIconSvg && (
-        <span
-          className="inline-flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-full"
-          dangerouslySetInnerHTML={{ __html: fileIconSvg }}
-        />
+        <span className="pane-tab-bar-tab-icon" dangerouslySetInnerHTML={{ __html: fileIconSvg }} />
       )}
       <span className="pane-tab-bar-tab-label">{label}</span>
       <span className="pane-tab-bar-tab-dirty-dot" />
