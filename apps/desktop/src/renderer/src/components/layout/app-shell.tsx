@@ -6,19 +6,24 @@ import { useTheme } from '@/hooks/use-theme'
 import { useTitlebarZoomCompensation } from '@/hooks/use-titlebar-zoom-compensation'
 import { useLayoutStore } from '@/stores/layout-store'
 import { useNotesStore } from '@/stores/notes-store'
+import type { AppViewMode } from '@/stores/view-mode-store'
 
 type AppShellProps = {
   children: React.ReactNode
   sidebarContent?: React.ReactNode
   onOpenSearch?: () => void
   isGhostMode?: boolean
+  viewMode: AppViewMode
+  onViewModeChange: (mode: AppViewMode) => void
 }
 
 function AppShell({
   children,
   sidebarContent,
   onOpenSearch,
-  isGhostMode = false
+  isGhostMode = false,
+  viewMode,
+  onViewModeChange
 }: AppShellProps): React.JSX.Element {
   useTheme()
   useIconTheme()
@@ -43,6 +48,8 @@ function AppShell({
         onCreateNote={hasSidebar ? () => void createNote() : undefined}
         onOpenSearch={onOpenSearch}
         isGhostMode={isGhostMode}
+        viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
       />
       {hasSidebar ? (
         <SidebarLayout

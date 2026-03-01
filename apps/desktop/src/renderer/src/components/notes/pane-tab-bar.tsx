@@ -500,6 +500,51 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   )
 }
 
+type ConfirmDialogAction = {
+  label: string
+  onClick: () => void
+  variant?: 'primary' | 'secondary'
+}
+
+type ConfirmDialogProps = {
+  title: string
+  description: string
+  actions: ConfirmDialogAction[]
+  onOverlayClick?: () => void
+}
+
+function ConfirmDialog({
+  title,
+  description,
+  actions,
+  onOverlayClick
+}: ConfirmDialogProps): React.JSX.Element {
+  return (
+    <>
+      <div className="close-confirm-overlay" onClick={onOverlayClick} />
+      <div className="close-confirm-dialog">
+        <p className="close-confirm-title">{title}</p>
+        <p className="close-confirm-description">{description}</p>
+        <div className="close-confirm-actions">
+          {actions.map((action, index) => (
+            <button
+              key={`${action.label}-${index}`}
+              className={`close-confirm-btn ${
+                action.variant === 'primary'
+                  ? 'close-confirm-btn-primary'
+                  : 'close-confirm-btn-secondary'
+              }`}
+              onClick={action.onClick}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
 type CloseConfirmDialogProps = {
   label: string
   onSave: () => void
@@ -514,27 +559,25 @@ function CloseConfirmDialog({
   onCancel
 }: CloseConfirmDialogProps): React.JSX.Element {
   return (
-    <>
-      <div className="close-confirm-overlay" onClick={onCancel} />
-      <div className="close-confirm-dialog">
-        <p className="close-confirm-title">Do you want to save the changes you made to {label}?</p>
-        <p className="close-confirm-description">
-          Your changes will be lost if you don&apos;t save them.
-        </p>
-        <div className="close-confirm-actions">
-          <button className="close-confirm-btn close-confirm-btn-primary" onClick={onSave}>
-            Save
-          </button>
-          <button className="close-confirm-btn close-confirm-btn-secondary" onClick={onDontSave}>
-            Don&apos;t Save
-          </button>
-          <button className="close-confirm-btn close-confirm-btn-secondary" onClick={onCancel}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </>
+    <ConfirmDialog
+      title={`Do you want to save the changes you made to ${label}?`}
+      description="Your changes will be lost if you don't save them."
+      actions={[
+        { label: 'Save', onClick: onSave, variant: 'primary' },
+        { label: "Don't Save", onClick: onDontSave, variant: 'secondary' },
+        { label: 'Cancel', onClick: onCancel, variant: 'secondary' }
+      ]}
+      onOverlayClick={onCancel}
+    />
   )
 }
 
-export { PaneTabBar, CloseConfirmDialog, TAB_DND_TYPE, type TabDragItem }
+export {
+  PaneTabBar,
+  ConfirmDialog,
+  CloseConfirmDialog,
+  TAB_DND_TYPE,
+  type TabDragItem,
+  type ConfirmDialogAction,
+  type ConfirmDialogProps
+}

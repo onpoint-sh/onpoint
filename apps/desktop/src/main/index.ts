@@ -23,6 +23,8 @@ import { registerTerminalIpc } from './terminal/ipc'
 import { createTerminalService } from './terminal/service'
 import { copyTerminalSettings, deleteTerminalSettings } from './terminal/store'
 import { WINDOW_IPC_CHANNELS } from '@onpoint/shared/window'
+import { registerAgentsIpc } from './agents/ipc'
+import { closeAllAgentsDbs, deleteAgentsDb, getAgentsDb } from './agents/db/client'
 
 type WindowTracker = { save: () => void; remove: () => void }
 const windowTrackers = new Map<string, WindowTracker>()
@@ -57,6 +59,7 @@ function createAppWindow(
       if (id !== 'main') {
         void deleteNotesConfig(id)
         void deleteTerminalSettings(id)
+        void deleteAgentsDb(id)
       }
     }
     windowTrackers.delete(id)
@@ -152,6 +155,15 @@ app.whenReady().then(() => {
     getWindowById: (windowId) => windowRegistry.getWindow(windowId)
   })
   const unregisterTerminalIpc = registerTerminalIpc(terminalService)
+  const windowIdsForMigration = Object.keys(savedStates)
+  if (windowIdsForMigration.length === 0) {
+    getAgentsDb('main')
+  } else {
+    for (const windowId of windowIdsForMigration) {
+      getAgentsDb(windowId)
+    }
+  }
+  const unregisterAgentsIpc = registerAgentsIpc()
 
   const ghostModeService = createGhostModeService({
     getWindows: () => windowRegistry.getAllWindows()
@@ -222,6 +234,8 @@ app.whenReady().then(() => {
     ghostModeService.dispose()
     unregisterNotesIpc()
     unregisterTerminalIpc()
+    unregisterAgentsIpc()
+    closeAllAgentsDbs()
     terminalService?.dispose()
     terminalService = null
     shortcutService.dispose()

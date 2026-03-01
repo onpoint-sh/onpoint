@@ -43,6 +43,16 @@ import {
   type TerminalSettings,
   type TerminalTitleEvent
 } from '@onpoint/shared/terminal'
+import {
+  AGENTS_IPC_CHANNELS,
+  type AgentArchiveInput,
+  type AgentAnswerClarificationInput,
+  type AgentCreateInput,
+  type AgentDeleteInput,
+  type AgentRecord,
+  type AgentSetStatusInput,
+  type AgentUpdatePlanInput
+} from '@onpoint/shared/agents'
 
 const IPC_CHANNELS = {
   minimize: 'window-controls:minimize',
@@ -344,6 +354,22 @@ const menuEvents = {
   }
 }
 
+const agents = {
+  list: () => ipcRenderer.invoke(AGENTS_IPC_CHANNELS.list) as Promise<AgentRecord[]>,
+  create: (input?: AgentCreateInput) =>
+    ipcRenderer.invoke(AGENTS_IPC_CHANNELS.create, input) as Promise<AgentRecord>,
+  updatePlan: (input: AgentUpdatePlanInput) =>
+    ipcRenderer.invoke(AGENTS_IPC_CHANNELS.updatePlan, input) as Promise<AgentRecord>,
+  setStatus: (input: AgentSetStatusInput) =>
+    ipcRenderer.invoke(AGENTS_IPC_CHANNELS.setStatus, input) as Promise<AgentRecord>,
+  answerClarification: (input: AgentAnswerClarificationInput) =>
+    ipcRenderer.invoke(AGENTS_IPC_CHANNELS.answerClarification, input) as Promise<AgentRecord>,
+  archive: (input: AgentArchiveInput) =>
+    ipcRenderer.invoke(AGENTS_IPC_CHANNELS.archive, input) as Promise<AgentRecord>,
+  delete: (input: AgentDeleteInput) =>
+    ipcRenderer.invoke(AGENTS_IPC_CHANNELS.delete, input) as Promise<void>
+}
+
 try {
   contextBridge.exposeInMainWorld('electron', electronAPI)
   contextBridge.exposeInMainWorld('windowControls', windowControls)
@@ -353,6 +379,7 @@ try {
   contextBridge.exposeInMainWorld('ghostMode', ghostMode)
   contextBridge.exposeInMainWorld('contextMenu', contextMenu)
   contextBridge.exposeInMainWorld('menuEvents', menuEvents)
+  contextBridge.exposeInMainWorld('agents', agents)
 } catch (error) {
   console.error(error)
 }

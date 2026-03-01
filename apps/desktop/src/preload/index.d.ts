@@ -36,6 +36,15 @@ import type {
   TerminalSettings,
   TerminalTitleEvent
 } from '@onpoint/shared/terminal'
+import type {
+  AgentArchiveInput,
+  AgentAnswerClarificationInput,
+  AgentCreateInput,
+  AgentDeleteInput,
+  AgentRecord,
+  AgentSetStatusInput,
+  AgentUpdatePlanInput
+} from '@onpoint/shared/agents'
 
 type WindowControlsAPI = {
   platform: NodeJS.Platform
@@ -143,6 +152,16 @@ type MenuEventsAPI = {
   onTriggerCreateNote: (callback: () => void) => () => void
 }
 
+type AgentsAPI = {
+  list: () => Promise<AgentRecord[]>
+  create: (input?: AgentCreateInput) => Promise<AgentRecord>
+  updatePlan: (input: AgentUpdatePlanInput) => Promise<AgentRecord>
+  setStatus: (input: AgentSetStatusInput) => Promise<AgentRecord>
+  answerClarification: (input: AgentAnswerClarificationInput) => Promise<AgentRecord>
+  archive: (input: AgentArchiveInput) => Promise<AgentRecord>
+  delete: (input: AgentDeleteInput) => Promise<void>
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -153,5 +172,6 @@ declare global {
     ghostMode: GhostModeAPI
     contextMenu: ContextMenuAPI
     menuEvents: MenuEventsAPI
+    agents: AgentsAPI
   }
 }

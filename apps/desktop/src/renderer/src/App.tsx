@@ -4,6 +4,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getDefaultShortcutProfile, type ShortcutActionId } from '@onpoint/shared/shortcuts'
 import { AppShell } from '@/components/layout/app-shell'
+import { AgentsWorkspace } from '@/components/agents/agents-workspace'
 import { SearchPalette } from '@/components/search/search-palette'
 import { SettingsSidebarNav } from '@/components/layout/settings-sidebar-nav'
 import { NotesSidebar } from '@/components/notes/notes-sidebar'
@@ -18,6 +19,7 @@ import { useLayoutStore } from '@/stores/layout-store'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
 import { useTerminalStore } from '@/stores/terminal-store'
+import { useViewModeStore } from '@/stores/view-mode-store'
 
 function App(): React.JSX.Element {
   const location = useLocation()
@@ -30,6 +32,17 @@ function App(): React.JSX.Element {
   const [isShortcutsLoading, setIsShortcutsLoading] = useState(true)
   const [isGhostMode, setIsGhostMode] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const viewMode = useViewModeStore((state) => state.viewMode)
+  const setViewMode = useViewModeStore((state) => state.setViewMode)
+  const handleViewModeChange = useCallback(
+    (nextMode: 'editor' | 'agents') => {
+      setViewMode(nextMode)
+      if (nextMode === 'agents') {
+        setIsSearchOpen(false)
+      }
+    },
+    [setViewMode]
+  )
 
   const dispatchShortcutAction = useCallback(
     (actionId: ShortcutActionId, origin: 'window' | 'global' = 'window'): void => {
@@ -232,6 +245,9 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'search') {
+        if (useViewModeStore.getState().viewMode === 'agents') {
+          return
+        }
         if (terminalState.isTerminalFocus && terminalState.focusedSessionId) {
           void terminalState.clearBuffer(terminalState.focusedSessionId)
           return
@@ -468,22 +484,28 @@ function App(): React.JSX.Element {
     }
   }, [])
 
-  const sidebarContent = IS_DETACHED_WINDOW ? undefined : location.pathname.startsWith(
-      '/settings'
-    ) ? (
-    <SettingsSidebarNav />
-  ) : (
-    <NotesSidebar />
-  )
+  const sidebarContent =
+    viewMode ===
+    'agents' ? undefined : IS_DETACHED_WINDOW ? undefined : location.pathname.startsWith(
+        '/settings'
+      ) ? (
+      <SettingsSidebarNav />
+    ) : (
+      <NotesSidebar />
+    )
 
   return (
     <DndProvider backend={HTML5Backend}>
       <AppShell
         sidebarContent={sidebarContent}
-        onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenSearch={viewMode === 'editor' ? () => setIsSearchOpen(true) : undefined}
         isGhostMode={isGhostMode}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
       >
-        {IS_DETACHED_WINDOW ? (
+        {viewMode === 'agents' ? (
+          <AgentsWorkspace />
+        ) : IS_DETACHED_WINDOW ? (
           <HomePage />
         ) : (
           <Routes>

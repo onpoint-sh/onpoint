@@ -1,11 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
 import { useDrag, useDragLayer, useDrop } from 'react-dnd'
 import type { MosaicDirection } from 'react-mosaic-component'
-import { ChevronDown, Plus } from 'lucide-react'
 import {
   BOTTOM_PANEL_VIEW_DEFINITIONS,
   BOTTOM_PANEL_VIEW_DEFINITIONS_BY_ID
 } from '@/bottom-panel/view-definitions'
+import { SplitAddButton } from '@/components/common/split-add-button'
 import { TabCloseButton } from '@/components/common/tab-close-button'
 import { useBottomPanelStore } from '@/stores/bottom-panel-store'
 import { usePanesStore } from '@/stores/panes-store'
@@ -449,28 +449,15 @@ function BottomPanelPane({ paneId }: BottomPanelPaneProps): React.JSX.Element | 
           })}
         </div>
         <div className="bottom-panel-toolbar">
-          <div className="bottom-panel-toolbar-split-add" role="group" aria-label="Add panel tab">
-            <button
-              type="button"
-              className="bottom-panel-toolbar-split-add-btn"
-              onClick={handleQuickAddView}
-              title="New Tab"
-              aria-label="New Tab"
-            >
-              <Plus className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              className="bottom-panel-toolbar-split-add-btn"
-              onClick={() => {
-                void handleOpenAddViewMenu()
-              }}
-              title="More Add Options"
-              aria-label="More Add Options"
-            >
-              <ChevronDown className="size-3.5" />
-            </button>
-          </div>
+          <SplitAddButton
+            groupLabel="Add panel tab"
+            primaryLabel="New tab"
+            secondaryLabel="More add options"
+            onPrimaryClick={handleQuickAddView}
+            onSecondaryClick={() => {
+              void handleOpenAddViewMenu()
+            }}
+          />
           {viewActions.map(renderToolbarAction)}
           <div className="bottom-panel-toolbar-separator" />
           {globalActions.map(renderToolbarAction)}
