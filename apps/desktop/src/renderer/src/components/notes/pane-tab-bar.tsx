@@ -114,12 +114,7 @@ function DraggableTab({
       )}
       <span className="pane-tab-bar-tab-label">{label}</span>
       <span className="pane-tab-bar-tab-dirty-dot" />
-      <TabCloseButton
-        className="pane-tab-bar-tab-close"
-        iconClassName="pane-tab-bar-close-x size-3"
-        label={`Close ${label}`}
-        onClick={onClose}
-      />
+      <TabCloseButton className="tab-close-button" label={`Close ${label}`} onClick={onClose} />
     </div>
   )
 }

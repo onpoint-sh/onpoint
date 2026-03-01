@@ -11,8 +11,8 @@ type TabCloseButtonProps = {
 function TabCloseButton({
   label,
   onClick,
-  className,
-  iconClassName = 'size-3',
+  className = 'tab-close-button',
+  iconClassName = 'tab-close-button-icon size-3',
   tabIndex = -1
 }: TabCloseButtonProps): React.JSX.Element {
   return (

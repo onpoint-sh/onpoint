@@ -105,12 +105,7 @@ function DraggableBottomPanelTab({
       }}
     >
       <span className="bottom-panel-tab-label">{label}</span>
-      <TabCloseButton
-        className="bottom-panel-tab-close"
-        iconClassName="pane-tab-bar-close-x size-3"
-        label={`Close ${label}`}
-        onClick={onClose}
-      />
+      <TabCloseButton className="tab-close-button" label={`Close ${label}`} onClick={onClose} />
     </div>
   )
 }
