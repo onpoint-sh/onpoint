@@ -18,6 +18,8 @@ import {
   type RenameFolderResult,
   type RenameNoteResult,
   type NoteSummary,
+  type OpenBufferSnapshot,
+  type SearchQueryOptions,
   type SaveNoteAsResult,
   type SaveNoteResult,
   type SearchContentMatch
@@ -205,6 +207,14 @@ const notes = {
     ) as Promise<RenameFolderResult>,
   searchContent: (query: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.searchContent, query) as Promise<SearchContentMatch[]>,
+  searchContentV2: (
+    query: string,
+    options?: SearchQueryOptions,
+    openBuffers?: OpenBufferSnapshot[]
+  ) =>
+    ipcRenderer.invoke(NOTES_IPC_CHANNELS.searchContentV2, query, options, openBuffers) as Promise<
+      SearchContentMatch[]
+    >,
   listFolders: () => ipcRenderer.invoke(NOTES_IPC_CHANNELS.listFolders) as Promise<string[]>
 }
 

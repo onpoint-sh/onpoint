@@ -62,11 +62,34 @@ export function isUntitledPath(path: string): boolean {
   return path.startsWith(UNTITLED_PREFIX)
 }
 
+export type SearchSource = 'buffer' | 'disk'
+
+export type SearchQueryOptions = {
+  limit?: number
+  includeGlobs?: string[]
+  excludeGlobs?: string[]
+  fileTypes?: string[]
+  includeIgnored?: boolean
+  caseSensitive?: boolean
+  regex?: boolean
+}
+
+export type OpenBufferSnapshot = {
+  relativePath: string
+  content: string
+  mtimeMs?: number
+  isDirty: boolean
+  title?: string
+}
+
 export type SearchContentMatch = {
   relativePath: string
   title: string
   snippet: string
   mtimeMs: number
+  source: SearchSource
+  line?: number
+  column?: number
 }
 
 export const NOTES_IPC_CHANNELS = {
@@ -85,5 +108,6 @@ export const NOTES_IPC_CHANNELS = {
   createFolder: 'notes:create-folder',
   renameFolder: 'notes:rename-folder',
   searchContent: 'notes:search-content',
+  searchContentV2: 'notes:search-content-v2',
   listFolders: 'notes:list-folders'
 } as const

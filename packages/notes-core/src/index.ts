@@ -24,6 +24,8 @@ export {
   archiveVaultNote,
   moveVaultNote,
   createVaultFolder,
+  searchVaultContentV2,
+  searchVaultTitlesV2,
   searchVaultContent,
   renameVaultFolder
 } from './vault-files'

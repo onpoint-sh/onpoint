@@ -1,4 +1,5 @@
 import {
+  app,
   BrowserWindow,
   dialog,
   ipcMain,
@@ -15,8 +16,11 @@ import {
   type NoteDocument,
   type NotesConfig,
   type NoteSummary,
+  type OpenBufferSnapshot,
   type RenameFolderResult,
   type RenameNoteResult,
+  type SearchContentMatch,
+  type SearchQueryOptions,
   type SaveNoteAsResult,
   type SaveNoteResult
 } from '@onpoint/shared/notes'
@@ -34,6 +38,7 @@ import {
   renameVaultNote,
   sanitizeRelativePath,
   saveVaultNote,
+  searchVaultContentV2,
   searchVaultContent
 } from './files'
 import { loadNotesConfig, saveNotesConfig } from './store'
@@ -66,8 +71,18 @@ function removeNotesHandlers(): void {
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.createFolder)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.renameFolder)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.searchContent)
+  ipcMain.removeHandler(NOTES_IPC_CHANNELS.searchContentV2)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.listFolders)
 }
+
+function isSearchV2Enabled(): boolean {
+  const configured = process.env.SEARCH_V2?.trim().toLowerCase()
+  if (configured === '1' || configured === 'true' || configured === 'yes') return true
+  if (configured === '0' || configured === 'false' || configured === 'no') return false
+  return !app.isPackaged
+}
+
+const SEARCH_V2_ENABLED = isSearchV2Enabled()
 
 function getWindowFromEvent(event: IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender)
@@ -390,6 +405,21 @@ async function renameFolder(
   return renameVaultFolder(vaultPath, fromRelativePath, toRelativePath)
 }
 
+async function searchContent(
+  windowId: string,
+  query: string,
+  options?: SearchQueryOptions,
+  openBuffers?: OpenBufferSnapshot[]
+): Promise<SearchContentMatch[]> {
+  const vaultPath = await ensureConfiguredVaultPath(windowId)
+
+  if (!SEARCH_V2_ENABLED) {
+    return searchVaultContent(vaultPath, query, options?.limit ?? 20)
+  }
+
+  return searchVaultContentV2(vaultPath, query, options, openBuffers)
+}
+
 export function registerNotesIpc(): () => void {
   removeNotesHandlers()
 
@@ -485,9 +515,25 @@ export function registerNotesIpc(): () => void {
 
   ipcMain.handle(NOTES_IPC_CHANNELS.searchContent, async (event, query: string) => {
     validateNonEmptyString(query, 'Search query')
-    const vaultPath = await ensureConfiguredVaultPath(resolveWindowId(event))
-    return searchVaultContent(vaultPath, query)
+    return searchContent(resolveWindowId(event), query, { limit: 20 })
   })
+
+  ipcMain.handle(
+    NOTES_IPC_CHANNELS.searchContentV2,
+    async (
+      event,
+      query: string,
+      options?: SearchQueryOptions,
+      openBuffers?: OpenBufferSnapshot[]
+    ) => {
+      validateNonEmptyString(query, 'Search query')
+      return searchContent(resolveWindowId(event), query, options, openBuffers)
+    }
+  )
+
+  if (SEARCH_V2_ENABLED && process.env.SEARCH_V2_DEBUG === '1') {
+    console.info('[notes] Search V2 enabled.')
+  }
 
   return () => {
     removeNotesHandlers()

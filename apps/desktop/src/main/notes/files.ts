@@ -16,6 +16,7 @@ export {
   renameVaultNote,
   sanitizeRelativePath,
   saveVaultNote,
+  searchVaultContentV2,
   searchVaultContent
 } from '@onpoint/notes-core/vault-files'
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isUntitledPath } from '@onpoint/shared/notes'
 import { useNotesStore } from '@/stores/notes-store'
+import { useSearchBufferStore } from '@/stores/search-buffer-store'
 import { getUntitledContent, setUntitledContent } from '@/lib/untitled-content-store'
 
 const AUTOSAVE_DELAY_MS = 700
@@ -29,6 +30,11 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
   const autosaveTimerRef = useRef<number | null>(null)
   const savingRef = useRef(false)
 
+  const getSnapshotTitle = useCallback((path: string): string | undefined => {
+    const note = useNotesStore.getState().notes.find((item) => item.relativePath === path)
+    return note?.title
+  }, [])
+
   // NOTE: relativePathRef is updated ONLY inside the load effect,
   // not during render. This prevents a race where a pending autosave
   // timer reads the new path but still has old content, which would
@@ -55,10 +61,11 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
     setSaveError(null)
 
     try {
-      await window.notes.saveNote(path, contentRef.current)
+      const result = await window.notes.saveNote(path, contentRef.current)
       dirtyRef.current = false
       setIsSaving(false)
       setIsDirty(false)
+      useSearchBufferStore.getState().markSaved(path, contentRef.current, result.mtimeMs)
       // Refresh notes list so sidebar titles update
       void useNotesStore.getState().refreshNotesList()
     } catch (error) {
@@ -88,9 +95,18 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
       setContentState(newContent)
       setIsDirty(true)
       setSaveError(null)
+      const path = relativePathRef.current
+      if (path && !isUntitledPath(path)) {
+        useSearchBufferStore.getState().upsertSnapshot({
+          relativePath: path,
+          content: newContent,
+          isDirty: true,
+          title: getSnapshotTitle(path)
+        })
+      }
       scheduleAutosave()
     },
-    [scheduleAutosave]
+    [getSnapshotTitle, scheduleAutosave]
   )
 
   const getContent = useCallback(() => contentRef.current, [])
@@ -147,6 +163,13 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
         setContentState(doc.content)
         setIsLoading(false)
         setIsDirty(false)
+        useSearchBufferStore.getState().upsertSnapshot({
+          relativePath: doc.relativePath,
+          content: doc.content,
+          mtimeMs: doc.mtimeMs,
+          isDirty: false,
+          title: getSnapshotTitle(doc.relativePath)
+        })
       },
       (error) => {
         if (cancelled) return
@@ -162,7 +185,16 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
     return () => {
       cancelled = true
     }
-  }, [relativePath, clearAutosave])
+  }, [relativePath, clearAutosave, getSnapshotTitle])
+
+  useEffect(() => {
+    if (!relativePath || isUntitledPath(relativePath)) return
+    useSearchBufferStore.getState().retainPath(relativePath)
+
+    return () => {
+      useSearchBufferStore.getState().releasePath(relativePath)
+    }
+  }, [relativePath])
 
   // Save on unmount
   useEffect(() => {

@@ -13,8 +13,10 @@ import type {
   NoteDocument,
   NotesConfig,
   NoteSummary,
+  OpenBufferSnapshot,
   RenameFolderResult,
   RenameNoteResult,
+  SearchQueryOptions,
   SaveNoteAsResult,
   SaveNoteResult,
   SearchContentMatch
@@ -76,6 +78,11 @@ type NotesAPI = {
   createFolder: (relativePath: string) => Promise<CreateFolderResult>
   renameFolder: (fromPath: string, toPath: string) => Promise<RenameFolderResult>
   searchContent: (query: string) => Promise<SearchContentMatch[]>
+  searchContentV2: (
+    query: string,
+    options?: SearchQueryOptions,
+    openBuffers?: OpenBufferSnapshot[]
+  ) => Promise<SearchContentMatch[]>
   listFolders: () => Promise<string[]>
 }
 

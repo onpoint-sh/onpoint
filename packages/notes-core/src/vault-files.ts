@@ -17,11 +17,13 @@ import type {
   DeleteNoteResult,
   MoveNoteResult,
   NoteDocument,
+  OpenBufferSnapshot,
   NoteSummary,
   RenameFolderResult,
   RenameNoteResult,
   SaveNoteResult,
-  SearchContentMatch
+  SearchContentMatch,
+  SearchQueryOptions
 } from '@onpoint/shared/notes'
 import {
   buildNoteContent,
@@ -34,6 +36,10 @@ import {
   stripCodeBlocks as doStripCodeBlocks,
   stripMarkdown as doStripMarkdown
 } from './markdown-strip'
+import {
+  searchVaultContentV2 as searchVaultContentV2Core,
+  searchVaultTitlesV2 as searchVaultTitlesV2Core
+} from './search-engine'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
@@ -50,6 +56,35 @@ const vaultBodyCaches = new Map<string, Map<string, BodyCacheEntry>>()
 
 function invalidateCacheEntry(vaultPath: string, relativePath: string): void {
   vaultBodyCaches.get(vaultPath)?.delete(relativePath)
+}
+
+function upsertCacheEntry(
+  vaultPath: string,
+  relativePath: string,
+  content: string,
+  mtimeMs: number
+): void {
+  const vaultCache = vaultBodyCaches.get(vaultPath)
+  if (!vaultCache) return
+
+  const isMdFile = relativePath.toLowerCase().endsWith('.md')
+  const title = extractTitleFromContent(content) ?? basename(relativePath, extname(relativePath))
+  vaultCache.set(relativePath, {
+    body: isMdFile ? extractBody(content) : content,
+    title,
+    mtimeMs
+  })
+}
+
+function moveCacheEntry(vaultPath: string, fromRelativePath: string, toRelativePath: string): void {
+  const vaultCache = vaultBodyCaches.get(vaultPath)
+  if (!vaultCache) return
+
+  const existing = vaultCache.get(fromRelativePath)
+  if (!existing) return
+
+  vaultCache.delete(fromRelativePath)
+  vaultCache.set(toRelativePath, existing)
 }
 
 function invalidateVaultCache(vaultPath: string): void {
@@ -212,14 +247,7 @@ async function walkVaultFiles(vaultPath: string, directoryPath: string): Promise
 
     // Populate body cache (piggyback on existing I/O)
     const vaultCache = vaultBodyCaches.get(vaultPath)
-    if (vaultCache) {
-      const isMdFile = summary.relativePath.toLowerCase().endsWith('.md')
-      vaultCache.set(summary.relativePath, {
-        body: isMdFile ? extractBody(content) : content,
-        title: summary.title,
-        mtimeMs: summary.mtimeMs
-      })
-    }
+    if (vaultCache) upsertCacheEntry(vaultPath, summary.relativePath, content, summary.mtimeMs)
   }
 
   return files
@@ -388,8 +416,9 @@ export async function saveVaultNote(
   await fs.writeFile(tempPath, content, 'utf-8')
   await fs.rename(tempPath, absolutePath)
 
+  const sanitizedRelativePath = sanitizeRelativePath(relativePath)
   const fileStats = await fs.stat(absolutePath)
-  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(relativePath))
+  upsertCacheEntry(resolvedVaultPath, sanitizedRelativePath, content, fileStats.mtimeMs)
 
   return {
     mtimeMs: fileStats.mtimeMs
@@ -415,7 +444,7 @@ export async function renameVaultNote(
 
   const nextRelativePath = toPosixPath(relative(resolvedVaultPath, absolutePath))
   const fileStats = await fs.stat(absolutePath)
-  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(relativePath))
+  upsertCacheEntry(resolvedVaultPath, nextRelativePath, nextContent, fileStats.mtimeMs)
 
   return {
     relativePath: nextRelativePath,
@@ -491,10 +520,22 @@ export async function moveVaultNote(
   await assertParentRealPathInsideVault(toAbsolute, resolvedVaultPath)
   await fs.rename(fromAbsolute, toAbsolute)
 
-  invalidateCacheEntry(resolvedVaultPath, sanitizeRelativePath(fromRelativePath))
+  const sanitizedFromPath = sanitizeRelativePath(fromRelativePath)
+  const nextRelativePath = toPosixPath(relative(resolvedVaultPath, toAbsolute))
+  moveCacheEntry(resolvedVaultPath, sanitizedFromPath, nextRelativePath)
+
+  let content: string | null = null
+  try {
+    content = await fs.readFile(toAbsolute, 'utf-8')
+  } catch {
+    invalidateCacheEntry(resolvedVaultPath, nextRelativePath)
+  }
   const fileStats = await fs.stat(toAbsolute)
+  if (content !== null) {
+    upsertCacheEntry(resolvedVaultPath, nextRelativePath, content, fileStats.mtimeMs)
+  }
   return {
-    relativePath: toPosixPath(relative(resolvedVaultPath, toAbsolute)),
+    relativePath: nextRelativePath,
     mtimeMs: fileStats.mtimeMs
   }
 }
@@ -516,15 +557,6 @@ export async function createVaultFolder(
   return { relativePath: toPosixPath(relative(resolvedVaultPath, absolutePath)) }
 }
 
-function buildSnippet(body: string, index: number, queryLength: number): string {
-  const snippetStart = Math.max(0, index - 40)
-  const snippetEnd = Math.min(body.length, index + queryLength + 80)
-  let snippet = body.slice(snippetStart, snippetEnd).replace(/\n+/g, ' ').trim()
-  if (snippetStart > 0) snippet = '...' + snippet
-  if (snippetEnd < body.length) snippet = snippet + '...'
-  return snippet
-}
-
 export type NoteSortField = 'mtime' | 'title' | 'path'
 
 export function sortNotes(notes: NoteSummary[], sortBy: NoteSortField = 'mtime'): NoteSummary[] {
@@ -543,48 +575,32 @@ export type SearchContentOptions = {
   stripMarkdown?: boolean
 }
 
+export async function searchVaultContentV2(
+  vaultPath: string,
+  query: string,
+  options?: SearchQueryOptions,
+  openBuffers?: OpenBufferSnapshot[]
+): Promise<SearchContentMatch[]> {
+  return searchVaultContentV2Core(vaultPath, query, options, openBuffers)
+}
+
+export async function searchVaultTitlesV2(
+  vaultPath: string,
+  query: string,
+  options?: SearchQueryOptions
+): Promise<(NoteSummary & { score: number })[]> {
+  return searchVaultTitlesV2Core(vaultPath, query, options)
+}
+
 export async function searchVaultContent(
   vaultPath: string,
   query: string,
   maxResults = 20,
   options?: SearchContentOptions
 ): Promise<SearchContentMatch[]> {
-  const resolvedVaultPath = await ensureVaultPath(vaultPath)
-  const lowerQuery = query.toLowerCase()
-  const matches: SearchContentMatch[] = []
-
-  // Fast path: use in-memory cache populated by listVaultNotes
-  const vaultCache = vaultBodyCaches.get(resolvedVaultPath)
-  if (vaultCache && vaultCache.size > 0) {
-    for (const [relativePath, entry] of vaultCache) {
-      if (matches.length >= maxResults) break
-      const index = entry.body.toLowerCase().indexOf(lowerQuery)
-      if (index === -1) continue
-      matches.push({
-        relativePath,
-        title: entry.title,
-        snippet: buildSnippet(entry.body, index, query.length),
-        mtimeMs: entry.mtimeMs
-      })
-    }
-  } else {
-    // Fallback: read from disk (only before first listVaultNotes completes)
-    const notes = await walkVaultFiles(resolvedVaultPath, resolvedVaultPath)
-    for (const note of notes) {
-      if (matches.length >= maxResults) break
-      const absolutePath = resolve(resolvedVaultPath, note.relativePath)
-      const raw = await fs.readFile(absolutePath, 'utf-8')
-      const body = extractBody(raw)
-      const index = body.toLowerCase().indexOf(lowerQuery)
-      if (index === -1) continue
-      matches.push({
-        relativePath: note.relativePath,
-        title: note.title,
-        snippet: buildSnippet(body, index, query.length),
-        mtimeMs: note.mtimeMs
-      })
-    }
-  }
+  const matches = await searchVaultContentV2Core(vaultPath, query, {
+    limit: maxResults
+  })
 
   if (options?.stripCodeBlocks || options?.stripMarkdown) {
     for (const match of matches) {

@@ -4,11 +4,13 @@ import type { SearchContentMatch } from '@onpoint/shared/notes'
 import { fuzzySearchNotes } from '@/lib/fuzzy-search'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
+import { useSearchBufferStore } from '@/stores/search-buffer-store'
 
 type SearchResult = {
   relativePath: string
   title: string
   snippet?: string
+  line?: number
   section: 'title' | 'content'
 }
 
@@ -25,6 +27,8 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
   const searchRequestIdRef = useRef(0)
   const notes = useNotesStore((state) => state.notes)
+  const bufferSnapshotMap = useSearchBufferStore((state) => state.snapshots)
+  const openBufferSnapshots = useMemo(() => Object.values(bufferSnapshotMap), [bufferSnapshotMap])
 
   const trimmedQuery = query.trim()
 
@@ -49,7 +53,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
     searchRequestIdRef.current = requestId
     const timeoutId = setTimeout(() => {
       window.notes
-        .searchContent(trimmedQuery)
+        .searchContentV2(trimmedQuery, { limit: 40 }, openBufferSnapshots)
         .then((matches) => {
           if (searchRequestIdRef.current !== requestId) return
           setContentResults(matches)
@@ -62,7 +66,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
     }, 300)
 
     return () => clearTimeout(timeoutId)
-  }, [trimmedQuery])
+  }, [openBufferSnapshots, trimmedQuery])
 
   // Merge results: title matches first, then content matches (deduplicated)
   const results: SearchResult[] = useMemo(() => {
@@ -74,6 +78,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
         relativePath: m.relativePath,
         title: m.title,
         snippet: m.snippet,
+        line: m.line,
         section: 'content' as const
       }))
     return [...titleResults, ...dedupedContent]
@@ -191,7 +196,9 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
                   <span className="search-palette-result-title">{result.title}</span>
                   {folder && <span className="search-palette-result-path">{folder}</span>}
                   {result.snippet && (
-                    <span className="search-palette-result-snippet">{result.snippet}</span>
+                    <span className="search-palette-result-snippet">
+                      {result.line ? `L${result.line}: ${result.snippet}` : result.snippet}
+                    </span>
                   )}
                 </button>
               </div>
