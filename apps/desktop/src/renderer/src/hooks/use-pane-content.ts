@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isUntitledPath } from '@onpoint/shared/notes'
 import { useNotesStore } from '@/stores/notes-store'
-import {
-  getUntitledContent,
-  setUntitledContent
-} from '@/lib/untitled-content-store'
+import { getUntitledContent, setUntitledContent } from '@/lib/untitled-content-store'
 
 const AUTOSAVE_DELAY_MS = 700
 
@@ -67,9 +64,7 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
     } catch (error) {
       setIsSaving(false)
       setSaveError(
-        error instanceof Error && error.message.length > 0
-          ? error.message
-          : 'Failed to save note.'
+        error instanceof Error && error.message.length > 0 ? error.message : 'Failed to save file.'
       )
     } finally {
       savingRef.current = false
@@ -159,7 +154,7 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
         setSaveError(
           error instanceof Error && error.message.length > 0
             ? error.message
-            : 'Failed to load note.'
+            : 'Failed to load file.'
         )
       }
     )
@@ -181,9 +176,7 @@ export function usePaneContent(relativePath: string | null): PaneContentState {
         setUntitledContent(path, contentRef.current)
       } else if (dirtyRef.current) {
         // Fire and forget — component is unmounting
-        void window.notes
-          .saveNote(path, contentRef.current)
-          .catch(() => {})
+        void window.notes.saveNote(path, contentRef.current).catch(() => {})
       }
     }
   }, [clearAutosave])

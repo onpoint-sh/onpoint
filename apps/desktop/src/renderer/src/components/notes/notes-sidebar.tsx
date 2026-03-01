@@ -14,6 +14,7 @@ import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
 import { useTreeStateStore } from '@/stores/tree-state-store'
 import { buildNotesTree, type NoteTreeNode } from '@/lib/notes-tree'
+import { getFileExtension, hasFileExtension } from '@/lib/file-types'
 import { NoteTreeNodeRenderer, markAsJustCreated } from './note-tree-node'
 import useResizeObserver from './use-resize-observer'
 
@@ -54,6 +55,7 @@ function NotesSidebar(): React.JSX.Element {
   const [stickyFolderRows, setStickyFolderRows] = useState<StickyFolderRow[]>([])
   const clipboardRef = useRef<{ relativePaths: string[] } | null>(null)
   const scrollOffsetRef = useRef(0)
+  const pendingNewNodeIds = useRef(new Set<string>())
 
   const vaultName = config.vaultPath?.split('/').pop() ?? 'Notes'
 
@@ -199,6 +201,7 @@ function NotesSidebar(): React.JSX.Element {
       const note = await window.notes.createNote(undefined, parentPath)
       const updatedNotes = await window.notes.listNotes()
       useNotesStore.setState({ notes: updatedNotes })
+      pendingNewNodeIds.current.add(note.relativePath)
       markAsJustCreated(note.relativePath)
       return { id: note.relativePath }
     },
@@ -224,9 +227,38 @@ function NotesSidebar(): React.JSX.Element {
           return next
         })
       } else {
-        // Open tab before rename so updateTabPath in the store picks it up
-        usePanesStore.getState().openTab(id)
-        void renameNote(id, name)
+        const isNewNode = pendingNewNodeIds.current.delete(id)
+
+        if (isNewNode && hasFileExtension(name) && !name.toLowerCase().endsWith('.md')) {
+          // New node with non-md extension: replace temp .md with the actual file
+          const parentDir = id.split('/').slice(0, -1).join('/')
+          const newPath = parentDir ? `${parentDir}/${name}` : name
+          void (async () => {
+            await window.notes.moveNote(id, newPath)
+            await window.notes.saveNote(newPath, '')
+            usePanesStore.getState().updateTabPath(id, newPath)
+            usePanesStore.getState().openTab(newPath)
+            void useNotesStore.getState().refreshNotesList()
+          })()
+        } else if (!isNewNode && !id.toLowerCase().endsWith('.md')) {
+          // Existing non-md file: rename the file, preserving extension if not typed
+          const ext = getFileExtension(id)
+          const parentDir = id.split('/').slice(0, -1).join('/')
+          const newFileName = hasFileExtension(name) ? name : `${name}${ext}`
+          const newPath = parentDir ? `${parentDir}/${newFileName}` : newFileName
+          if (id !== newPath) {
+            void (async () => {
+              await window.notes.moveNote(id, newPath)
+              usePanesStore.getState().updateTabPath(id, newPath)
+              void useNotesStore.getState().refreshNotesList()
+            })()
+          }
+        } else {
+          // .md file (new or existing): title rename via frontmatter
+          const title = name.replace(/\.md$/i, '')
+          usePanesStore.getState().openTab(id)
+          void renameNote(id, title)
+        }
       }
     },
     [renameNote, renameFolder]
@@ -328,7 +360,7 @@ function NotesSidebar(): React.JSX.Element {
 
       if (!node) {
         items = [
-          { id: 'new-note', label: 'New Note' },
+          { id: 'new-note', label: 'New File' },
           { id: 'new-folder', label: 'New Folder' },
           ...(hasCut ? [{ id: 'paste', label: 'Paste', accelerator: 'CmdOrCtrl+V' }] : [])
         ]
@@ -337,7 +369,7 @@ function NotesSidebar(): React.JSX.Element {
         items = [
           { id: 'cut', label: `Cut ${selectedNodes.length} Items`, accelerator: 'CmdOrCtrl+X' },
           { id: 'sep-1', label: '', separator: true },
-          ...(hasNotes ? [{ id: 'archive', label: 'Archive Notes' }] : []),
+          ...(hasNotes ? [{ id: 'archive', label: 'Archive' }] : []),
           { id: 'delete', label: `Delete ${selectedNodes.length} Items` }
         ]
       } else if (node.data.isNote) {
@@ -355,7 +387,7 @@ function NotesSidebar(): React.JSX.Element {
         ]
       } else {
         items = [
-          { id: 'new-note', label: 'New Note' },
+          { id: 'new-note', label: 'New File' },
           { id: 'new-folder', label: 'New Folder' },
           ...(hasCut ? [{ id: 'paste', label: 'Paste', accelerator: 'CmdOrCtrl+V' }] : []),
           { id: 'sep-1', label: '', separator: true },
@@ -471,7 +503,7 @@ function NotesSidebar(): React.JSX.Element {
               <button
                 type="button"
                 className="inline-flex size-6 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent text-muted-foreground transition-colors duration-[120ms] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_82%,transparent)] hover:text-sidebar-foreground"
-                title="New Note"
+                title="New File"
                 onClick={() => {
                   if (treeRef.current) {
                     void treeRef.current.createLeaf()
@@ -522,7 +554,7 @@ function NotesSidebar(): React.JSX.Element {
             <>
               {notes.length === 0 && pendingFolders.size === 0 ? (
                 <p className="m-0 text-[0.76rem] leading-[1.35] text-muted-foreground">
-                  No markdown files found yet. Create your first note.
+                  No files found yet. Create your first file.
                 </p>
               ) : (
                 <div

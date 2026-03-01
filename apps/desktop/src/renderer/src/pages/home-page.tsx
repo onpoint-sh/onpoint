@@ -44,20 +44,12 @@ function WelcomePage(): React.JSX.Element {
             Start
           </p>
           {config.vaultPath ? (
-            <button
-              type="button"
-              className="welcome-link"
-              onClick={() => void createNote()}
-            >
+            <button type="button" className="welcome-link" onClick={() => void createNote()}>
               <FilePlus2 className="size-[1.05rem]" />
-              New Note…
+              New File…
             </button>
           ) : null}
-          <button
-            type="button"
-            className="welcome-link"
-            onClick={() => void pickVault()}
-          >
+          <button type="button" className="welcome-link" onClick={() => void pickVault()}>
             <FolderOpen className="size-[1.05rem]" />
             Open…
           </button>

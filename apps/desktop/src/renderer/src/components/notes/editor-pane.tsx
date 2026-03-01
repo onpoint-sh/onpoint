@@ -2,8 +2,11 @@ import { useCallback, useRef, useState } from 'react'
 import { useDragLayer, useDrop } from 'react-dnd'
 import type { MosaicDirection } from 'react-mosaic-component'
 import { usePanesStore } from '@/stores/panes-store'
+import { getFileType } from '@/lib/file-types'
 import { PaneTabBar, TAB_DND_TYPE, type TabDragItem } from './pane-tab-bar'
 import { PaneEditor } from './pane-editor'
+import { MermaidEditor } from './mermaid-editor'
+import { CodeEditor } from './code-editor'
 
 type EdgePosition = 'left' | 'right' | 'top' | 'bottom'
 
@@ -28,7 +31,11 @@ function SplitDropOverlay({
   const edgeRef = useRef<EdgePosition | null>(null)
   const [activeEdge, setActiveEdge] = useState<EdgePosition | null>(null)
 
-  const [{ isOver, canDrop }, dropRef] = useDrop<TabDragItem, unknown, { isOver: boolean; canDrop: boolean }>({
+  const [{ isOver, canDrop }, dropRef] = useDrop<
+    TabDragItem,
+    unknown,
+    { isOver: boolean; canDrop: boolean }
+  >({
     accept: TAB_DND_TYPE,
     canDrop(item) {
       if (item.paneId === paneId) {
@@ -60,7 +67,10 @@ function SplitDropOverlay({
 
   return (
     <div
-      ref={(node) => { containerRef.current = node; dropRef(node) }}
+      ref={(node) => {
+        containerRef.current = node
+        dropRef(node)
+      }}
       className="split-drop-overlay"
     >
       {showHighlight && (
@@ -84,8 +94,8 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
   const consumeEditorFocusRequest = usePanesStore((s) => s.consumeEditorFocusRequest)
 
   // Detect if a tab drag is in progress (to enable edge drop zones)
-  const isTabDragging = useDragLayer((monitor) =>
-    monitor.isDragging() && monitor.getItemType() === TAB_DND_TYPE
+  const isTabDragging = useDragLayer(
+    (monitor) => monitor.isDragging() && monitor.getItemType() === TAB_DND_TYPE
   )
 
   const activeTab = pane?.tabs.find((t) => t.id === pane.activeTabId)
@@ -132,7 +142,13 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
         top: 'first',
         bottom: 'second'
       }
-      splitPaneWithTab(paneId, directionMap[position], positionMap[position], item.paneId, item.tabId)
+      splitPaneWithTab(
+        paneId,
+        directionMap[position],
+        positionMap[position],
+        item.paneId,
+        item.tabId
+      )
     },
     [paneId, splitPaneWithTab]
   )
@@ -153,14 +169,47 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
       onFocusCapture={handleFocus}
     >
       <PaneTabBar paneId={paneId} />
-      <div ref={(node) => { centerDropRef(node) }} className="editor-pane-body" data-dragging={isTabDragging}>
-        <PaneEditor
-          key={activeTab?.id}
-          tabId={activeTab?.id}
-          relativePath={relativePath}
-          focusRequestId={scopedFocusRequestId}
-          onFocusConsumed={handleFocusConsumed}
-        />
+      <div
+        ref={(node) => {
+          centerDropRef(node)
+        }}
+        className="editor-pane-body"
+        data-dragging={isTabDragging}
+      >
+        {(() => {
+          const fileType = relativePath ? getFileType(relativePath) : 'markdown'
+          if (fileType === 'mermaid') {
+            return (
+              <MermaidEditor
+                key={activeTab?.id}
+                tabId={activeTab?.id}
+                relativePath={relativePath}
+                focusRequestId={scopedFocusRequestId}
+                onFocusConsumed={handleFocusConsumed}
+              />
+            )
+          }
+          if (fileType === 'code') {
+            return (
+              <CodeEditor
+                key={activeTab?.id}
+                tabId={activeTab?.id}
+                relativePath={relativePath}
+                focusRequestId={scopedFocusRequestId}
+                onFocusConsumed={handleFocusConsumed}
+              />
+            )
+          }
+          return (
+            <PaneEditor
+              key={activeTab?.id}
+              tabId={activeTab?.id}
+              relativePath={relativePath}
+              focusRequestId={scopedFocusRequestId}
+              onFocusConsumed={handleFocusConsumed}
+            />
+          )
+        })()}
         <SplitDropOverlay paneId={paneId} onDrop={handleEdgeDrop} />
       </div>
     </div>

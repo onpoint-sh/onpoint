@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { NotesConfig } from '@onpoint/shared/notes'
 
 type StoredNotesConfig = {
@@ -58,6 +59,12 @@ export async function loadNotesConfigFromPath(filePath: string): Promise<NotesCo
 
 export async function saveNotesConfigToPath(filePath: string, config: NotesConfig): Promise<void> {
   const storedConfig = toStoredNotesConfig(config)
-  await fs.mkdir(dirname(filePath), { recursive: true })
-  await fs.writeFile(filePath, JSON.stringify(storedConfig, null, 2), 'utf-8')
+  const dir = dirname(filePath)
+  await fs.mkdir(dir, { recursive: true })
+
+  // Atomic write: write to a temp file then rename to avoid corruption
+  // if the process crashes mid-write or concurrent reads overlap.
+  const tempPath = join(dir, `.notes-config-${randomUUID()}.tmp`)
+  await fs.writeFile(tempPath, JSON.stringify(storedConfig, null, 2), 'utf-8')
+  await fs.rename(tempPath, filePath)
 }

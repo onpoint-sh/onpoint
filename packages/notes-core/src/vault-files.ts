@@ -174,7 +174,7 @@ export function toNoteSummary(
   }
 }
 
-async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Promise<NoteSummary[]> {
+async function walkVaultFiles(vaultPath: string, directoryPath: string): Promise<NoteSummary[]> {
   const entries = await fs.readdir(directoryPath, { withFileTypes: true })
   const files: NoteSummary[] = []
 
@@ -186,12 +186,12 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
     const absolutePath = join(directoryPath, entry.name)
 
     if (entry.isDirectory()) {
-      const nestedFiles = await walkMarkdownFiles(vaultPath, absolutePath)
+      const nestedFiles = await walkVaultFiles(vaultPath, absolutePath)
       files.push(...nestedFiles)
       continue
     }
 
-    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue
+    if (!entry.isFile()) continue
 
     let content: string
     try {
@@ -213,8 +213,9 @@ async function walkMarkdownFiles(vaultPath: string, directoryPath: string): Prom
     // Populate body cache (piggyback on existing I/O)
     const vaultCache = vaultBodyCaches.get(vaultPath)
     if (vaultCache) {
+      const isMdFile = summary.relativePath.toLowerCase().endsWith('.md')
       vaultCache.set(summary.relativePath, {
-        body: extractBody(content),
+        body: isMdFile ? extractBody(content) : content,
         title: summary.title,
         mtimeMs: summary.mtimeMs
       })
@@ -255,7 +256,7 @@ export async function listVaultNotes(vaultPath: string): Promise<NoteSummary[]> 
   // Reset body cache before full walk — ensures a complete snapshot
   vaultBodyCaches.set(resolvedVaultPath, new Map())
 
-  const notes = await walkMarkdownFiles(resolvedVaultPath, resolvedVaultPath)
+  const notes = await walkVaultFiles(resolvedVaultPath, resolvedVaultPath)
 
   notes.sort((left, right) => {
     return right.mtimeMs - left.mtimeMs
@@ -306,7 +307,10 @@ export async function openVaultNote(
   }
   const fileStats = await fs.stat(absolutePath)
 
-  const content = migrateFromHeading(rawContent, new Date(fileStats.birthtimeMs).toISOString())
+  const isMd = relativePath.toLowerCase().endsWith('.md')
+  const content = isMd
+    ? migrateFromHeading(rawContent, new Date(fileStats.birthtimeMs).toISOString())
+    : rawContent
 
   return {
     relativePath: sanitizeRelativePath(relativePath),
@@ -565,7 +569,7 @@ export async function searchVaultContent(
     }
   } else {
     // Fallback: read from disk (only before first listVaultNotes completes)
-    const notes = await walkMarkdownFiles(resolvedVaultPath, resolvedVaultPath)
+    const notes = await walkVaultFiles(resolvedVaultPath, resolvedVaultPath)
     for (const note of notes) {
       if (matches.length >= maxResults) break
       const absolutePath = resolve(resolvedVaultPath, note.relativePath)

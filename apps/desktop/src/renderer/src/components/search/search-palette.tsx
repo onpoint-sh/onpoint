@@ -23,6 +23,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
   const [isContentLoading, setIsContentLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const searchRequestIdRef = useRef(0)
   const notes = useNotesStore((state) => state.notes)
 
   const trimmedQuery = query.trim()
@@ -40,20 +41,22 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
   // Content search (debounced IPC) — runs in parallel with title search
   useEffect(() => {
     if (trimmedQuery.length < 2) {
-      setContentResults([])
-      setIsContentLoading(false)
+      searchRequestIdRef.current += 1
       return
     }
 
-    setIsContentLoading(true)
+    const requestId = searchRequestIdRef.current + 1
+    searchRequestIdRef.current = requestId
     const timeoutId = setTimeout(() => {
       window.notes
         .searchContent(trimmedQuery)
         .then((matches) => {
+          if (searchRequestIdRef.current !== requestId) return
           setContentResults(matches)
           setIsContentLoading(false)
         })
         .catch(() => {
+          if (searchRequestIdRef.current !== requestId) return
           setIsContentLoading(false)
         })
     }, 300)
@@ -63,8 +66,9 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
 
   // Merge results: title matches first, then content matches (deduplicated)
   const results: SearchResult[] = useMemo(() => {
+    const visibleContentResults = trimmedQuery.length < 2 ? [] : contentResults
     const titlePaths = new Set(titleResults.map((r) => r.relativePath))
-    const dedupedContent: SearchResult[] = contentResults
+    const dedupedContent: SearchResult[] = visibleContentResults
       .filter((m) => !titlePaths.has(m.relativePath))
       .map((m) => ({
         relativePath: m.relativePath,
@@ -73,12 +77,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
         section: 'content' as const
       }))
     return [...titleResults, ...dedupedContent]
-  }, [titleResults, contentResults])
-
-  // Reset selection when results change
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [trimmedQuery])
+  }, [titleResults, contentResults, trimmedQuery])
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -148,17 +147,26 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
   return (
     <>
       <div className="search-palette-overlay" onClick={onClose} />
-      <div
-        className="search-palette-dialog"
-        onKeyDown={handleKeyDown}
-      >
+      <div className="search-palette-dialog" onKeyDown={handleKeyDown}>
         <div className="search-palette-input-row">
           <Search className="search-palette-icon" />
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search notes..."
+            onChange={(e) => {
+              const nextQuery = e.target.value
+              const nextTrimmedQuery = nextQuery.trim()
+              setQuery(nextQuery)
+              setSelectedIndex(0)
+              if (nextTrimmedQuery.length < 2) {
+                searchRequestIdRef.current += 1
+                setContentResults([])
+                setIsContentLoading(false)
+              } else {
+                setIsContentLoading(true)
+              }
+            }}
+            placeholder="Search files..."
             className="search-palette-input"
             spellCheck={false}
           />
@@ -181,9 +189,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
                   <span className="search-palette-result-title">{result.title}</span>
-                  {folder && (
-                    <span className="search-palette-result-path">{folder}</span>
-                  )}
+                  {folder && <span className="search-palette-result-path">{folder}</span>}
                   {result.snippet && (
                     <span className="search-palette-result-snippet">{result.snippet}</span>
                   )}
@@ -192,7 +198,7 @@ function SearchPalette({ onClose }: SearchPaletteProps): React.JSX.Element {
             )
           })}
 
-          {isContentLoading && results.length === 0 && (
+          {trimmedQuery.length >= 2 && isContentLoading && results.length === 0 && (
             <p className="search-palette-empty">Searching...</p>
           )}
 

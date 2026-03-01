@@ -79,8 +79,31 @@ function resolveWindowId(event: IpcMainInvokeEvent): string {
   return windowRegistry.getWindowId(window) ?? 'main'
 }
 
-async function ensureConfiguredVaultPath(windowId: string): Promise<string> {
+// In-memory config cache: prevents repeated disk reads of a corrupted or
+// mid-write config file. Written configs are cached immediately so that
+// concurrent IPC calls always see the latest known-good value.
+const configCache = new Map<string, NotesConfig>()
+
+async function loadCachedNotesConfig(windowId: string): Promise<NotesConfig> {
+  const cached = configCache.get(windowId)
+  if (cached) return cached
   const config = await loadNotesConfig(windowId)
+  if (config.vaultPath) {
+    configCache.set(windowId, config)
+  }
+  return config
+}
+
+function setCachedNotesConfig(windowId: string, config: NotesConfig): void {
+  if (config.vaultPath) {
+    configCache.set(windowId, config)
+  } else {
+    configCache.delete(windowId)
+  }
+}
+
+async function ensureConfiguredVaultPath(windowId: string): Promise<string> {
+  const config = await loadCachedNotesConfig(windowId)
 
   if (!config.vaultPath) {
     throw new Error('No vault selected. Choose a notes folder first.')
@@ -101,7 +124,7 @@ function mergeConfig(config: NotesConfig, updates: Partial<NotesConfig>): NotesC
 
 async function setVaultConfig(windowId: string, vaultPath: string): Promise<NotesConfig> {
   const nextVaultPath = await ensureVaultPath(vaultPath)
-  const currentConfig = await loadNotesConfig(windowId)
+  const currentConfig = await loadCachedNotesConfig(windowId)
 
   const nextConfig = mergeConfig(currentConfig, {
     vaultPath: nextVaultPath,
@@ -109,12 +132,13 @@ async function setVaultConfig(windowId: string, vaultPath: string): Promise<Note
       currentConfig.vaultPath === nextVaultPath ? currentConfig.lastOpenedRelativePath : null
   })
 
+  setCachedNotesConfig(windowId, nextConfig)
   await saveNotesConfig(windowId, nextConfig)
   return nextConfig
 }
 
 async function getConfig(windowId: string): Promise<NotesConfig> {
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
   if (!config.vaultPath) {
     return config
@@ -124,10 +148,12 @@ async function getConfig(windowId: string): Promise<NotesConfig> {
     const resolvedVaultPath = await ensureVaultPath(config.vaultPath)
 
     if (resolvedVaultPath === config.vaultPath) {
+      setCachedNotesConfig(windowId, config)
       return config
     }
 
     const nextConfig = mergeConfig(config, { vaultPath: resolvedVaultPath })
+    setCachedNotesConfig(windowId, nextConfig)
     await saveNotesConfig(windowId, nextConfig)
     return nextConfig
   } catch {
@@ -136,6 +162,7 @@ async function getConfig(windowId: string): Promise<NotesConfig> {
       lastOpenedRelativePath: null
     })
 
+    setCachedNotesConfig(windowId, resetConfig)
     await saveNotesConfig(windowId, resetConfig)
     return resetConfig
   }
@@ -180,14 +207,13 @@ async function listFolders(windowId: string): Promise<string[]> {
 async function openNote(windowId: string, relativePath: string): Promise<NoteDocument> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const note = await openVaultNote(vaultPath, relativePath)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
-  await saveNotesConfig(
-    windowId,
-    mergeConfig(config, {
-      lastOpenedRelativePath: note.relativePath
-    })
-  )
+  const nextConfig = mergeConfig(config, {
+    lastOpenedRelativePath: note.relativePath
+  })
+  setCachedNotesConfig(windowId, nextConfig)
+  await saveNotesConfig(windowId, nextConfig)
 
   return note
 }
@@ -199,14 +225,13 @@ async function createNote(
 ): Promise<NoteDocument> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const note = await createVaultNote(vaultPath, input, parentRelativePath)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
-  await saveNotesConfig(
-    windowId,
-    mergeConfig(config, {
-      lastOpenedRelativePath: note.relativePath
-    })
-  )
+  const nextConfig = mergeConfig(config, {
+    lastOpenedRelativePath: note.relativePath
+  })
+  setCachedNotesConfig(windowId, nextConfig)
+  await saveNotesConfig(windowId, nextConfig)
 
   return note
 }
@@ -218,14 +243,13 @@ async function saveNote(
 ): Promise<SaveNoteResult> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const saveResult = await saveVaultNote(vaultPath, relativePath, content)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
-  await saveNotesConfig(
-    windowId,
-    mergeConfig(config, {
-      lastOpenedRelativePath: relativePath
-    })
-  )
+  const nextConfig = mergeConfig(config, {
+    lastOpenedRelativePath: relativePath
+  })
+  setCachedNotesConfig(windowId, nextConfig)
+  await saveNotesConfig(windowId, nextConfig)
 
   return saveResult
 }
@@ -239,10 +263,17 @@ async function saveNoteAs(
   const browserWindow = getWindowFromEvent(event)
 
   const dialogOptions = {
-    title: 'Save Note',
+    title: 'Save File',
     defaultPath: vaultPath,
     filters: [
       { name: 'Markdown', extensions: ['md'] },
+      { name: 'Mermaid', extensions: ['mmd', 'mermaid'] },
+      { name: 'JavaScript/TypeScript', extensions: ['js', 'jsx', 'ts', 'tsx'] },
+      { name: 'JSON', extensions: ['json'] },
+      { name: 'YAML', extensions: ['yaml', 'yml'] },
+      { name: 'HTML/CSS', extensions: ['html', 'css', 'scss'] },
+      { name: 'Python', extensions: ['py'] },
+      { name: 'Text', extensions: ['txt'] },
       { name: 'All Files', extensions: ['*'] }
     ]
   }
@@ -273,8 +304,10 @@ async function saveNoteAs(
   const fileStats = await fs.stat(filePath)
   const relativePath = relative(vaultPath, filePath).replace(/\\/g, '/')
 
-  const config = await loadNotesConfig(windowId)
-  await saveNotesConfig(windowId, mergeConfig(config, { lastOpenedRelativePath: relativePath }))
+  const config = await loadCachedNotesConfig(windowId)
+  const nextConfig = mergeConfig(config, { lastOpenedRelativePath: relativePath })
+  setCachedNotesConfig(windowId, nextConfig)
+  await saveNotesConfig(windowId, nextConfig)
 
   return { relativePath, mtimeMs: fileStats.mtimeMs }
 }
@@ -286,14 +319,13 @@ async function renameNote(
 ): Promise<RenameNoteResult> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const renameResult = await renameVaultNote(vaultPath, relativePath, requestedTitle)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
-  await saveNotesConfig(
-    windowId,
-    mergeConfig(config, {
-      lastOpenedRelativePath: renameResult.relativePath
-    })
-  )
+  const nextConfig = mergeConfig(config, {
+    lastOpenedRelativePath: renameResult.relativePath
+  })
+  setCachedNotesConfig(windowId, nextConfig)
+  await saveNotesConfig(windowId, nextConfig)
 
   return renameResult
 }
@@ -301,10 +333,12 @@ async function renameNote(
 async function deleteNote(windowId: string, relativePath: string): Promise<DeleteNoteResult> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const result = await deleteVaultNote(vaultPath, relativePath)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
   if (config.lastOpenedRelativePath === relativePath) {
-    await saveNotesConfig(windowId, mergeConfig(config, { lastOpenedRelativePath: null }))
+    const nextConfig = mergeConfig(config, { lastOpenedRelativePath: null })
+    setCachedNotesConfig(windowId, nextConfig)
+    await saveNotesConfig(windowId, nextConfig)
   }
 
   return result
@@ -313,10 +347,12 @@ async function deleteNote(windowId: string, relativePath: string): Promise<Delet
 async function archiveNote(windowId: string, relativePath: string): Promise<ArchiveNoteResult> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const result = await archiveVaultNote(vaultPath, relativePath)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
   if (config.lastOpenedRelativePath === relativePath) {
-    await saveNotesConfig(windowId, mergeConfig(config, { lastOpenedRelativePath: null }))
+    const nextConfig = mergeConfig(config, { lastOpenedRelativePath: null })
+    setCachedNotesConfig(windowId, nextConfig)
+    await saveNotesConfig(windowId, nextConfig)
   }
 
   return result
@@ -329,13 +365,12 @@ async function moveNote(
 ): Promise<MoveNoteResult> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const result = await moveVaultNote(vaultPath, fromRelativePath, toRelativePath)
-  const config = await loadNotesConfig(windowId)
+  const config = await loadCachedNotesConfig(windowId)
 
   if (config.lastOpenedRelativePath === fromRelativePath) {
-    await saveNotesConfig(
-      windowId,
-      mergeConfig(config, { lastOpenedRelativePath: result.relativePath })
-    )
+    const nextConfig = mergeConfig(config, { lastOpenedRelativePath: result.relativePath })
+    setCachedNotesConfig(windowId, nextConfig)
+    await saveNotesConfig(windowId, nextConfig)
   }
 
   return result

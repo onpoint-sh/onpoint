@@ -128,7 +128,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
     } catch (error) {
       set({
         isLoading: false,
-        error: errorMessage(error, 'Failed to create note.')
+        error: errorMessage(error, 'Failed to create file.')
       })
       return null
     }
@@ -160,7 +160,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
     } catch (error) {
       set({
         isLoading: false,
-        error: errorMessage(error, 'Failed to rename note.')
+        error: errorMessage(error, 'Failed to rename file.')
       })
     }
   },
@@ -180,7 +180,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
     } catch (error) {
       set({
         isLoading: false,
-        error: errorMessage(error, 'Failed to delete note.')
+        error: errorMessage(error, 'Failed to delete file.')
       })
     }
   },
@@ -200,7 +200,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
     } catch (error) {
       set({
         isLoading: false,
-        error: errorMessage(error, 'Failed to archive note.')
+        error: errorMessage(error, 'Failed to archive file.')
       })
     }
   },
@@ -220,7 +220,7 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
     } catch (error) {
       set({
         isLoading: false,
-        error: errorMessage(error, 'Failed to move note.')
+        error: errorMessage(error, 'Failed to move file.')
       })
     }
   },

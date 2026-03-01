@@ -3,6 +3,7 @@ import type { NodeRendererProps } from 'react-arborist'
 import { ChevronRight } from 'lucide-react'
 import { useIconThemeAdapter } from '@onpoint/icon-themes'
 import type { NoteTreeNode } from '@/lib/notes-tree'
+import { getFileExtension } from '@/lib/file-types'
 import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { usePanesStore } from '@/stores/panes-store'
 
@@ -35,7 +36,14 @@ function NoteTreeNodeRenderer({
   const adapter = useIconThemeAdapter(iconThemeId)
 
   const isNewNode = justCreatedIds.has(node.id)
-  const [editValue, setEditValue] = useState(isNewNode ? '' : node.data.name)
+  const isNonMdFile = node.data.isNote && !node.data.relativePath.toLowerCase().endsWith('.md')
+  const [editValue, setEditValue] = useState(
+    isNewNode
+      ? ''
+      : isNonMdFile
+        ? (node.data.relativePath.split('/').pop() ?? node.data.name)
+        : node.data.name
+  )
   const inputRef = useRef<HTMLInputElement>(null)
 
   const contentStyle = useMemo(
@@ -83,7 +91,7 @@ function NoteTreeNodeRenderer({
           {node.isLeaf ? (
             <>
               <span className="inline-flex w-4 shrink-0" />
-              {fileIcon}
+              {isNewNode ? <span className="inline-flex size-[14px] shrink-0" /> : fileIcon}
             </>
           ) : (
             <>
@@ -148,7 +156,11 @@ function NoteTreeNodeRenderer({
             {folderIcon(node.isOpen)}
           </>
         )}
-        <span className="truncate font-[520] text-sidebar-foreground">{node.data.name}</span>
+        <span className="truncate font-[520] text-sidebar-foreground">
+          {node.data.isNote
+            ? `${node.data.name}${getFileExtension(node.data.relativePath)}`
+            : node.data.name}
+        </span>
       </div>
     </div>
   )

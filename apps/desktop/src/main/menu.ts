@@ -38,7 +38,7 @@ export function setupApplicationMenu(options: MenuOptions): void {
       label: 'File',
       submenu: [
         {
-          label: 'New Note',
+          label: 'New File',
           accelerator: 'CmdOrCtrl+N',
           click: (_menuItem, browserWindow): void => {
             const window =

@@ -3,6 +3,7 @@ import { useDrag, useDrop } from 'react-dnd'
 import { X, Pin } from 'lucide-react'
 import { useIconThemeAdapter } from '@onpoint/icon-themes'
 import { isUntitledPath } from '@onpoint/shared/notes'
+import { getFileExtension } from '@/lib/file-types'
 import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { usePanesStore, findAdjacentPaneId } from '@/stores/panes-store'
 import { useNotesStore } from '@/stores/notes-store'
@@ -155,11 +156,12 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   const resolveTitle = useCallback(
     (relativePath: string): string => {
       if (isUntitledPath(relativePath)) return 'Untitled'
+      const ext = getFileExtension(relativePath)
       const note = notes.find((n) => n.relativePath === relativePath)
-      if (note) return note.title
+      if (note) return `${note.title}${ext}`
       const parts = relativePath.split('/')
       const filename = parts[parts.length - 1]
-      return filename.replace(/\.md$/, '')
+      return filename
     },
     [notes]
   )

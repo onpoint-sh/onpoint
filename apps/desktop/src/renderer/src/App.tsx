@@ -22,7 +22,7 @@ function App(): React.JSX.Element {
   const toggleSidebar = useLayoutStore((state) => state.toggleSidebar)
   const initializeNotes = useNotesStore((state) => state.initialize)
   const pickVault = useNotesStore((state) => state.pickVault)
-  const createNote = useNotesStore((state) => state.createNote)
+
   const [shortcutBindings, setShortcutBindings] = useState(getDefaultShortcutBindings)
   const [isShortcutsLoading, setIsShortcutsLoading] = useState(true)
   const [isGhostMode, setIsGhostMode] = useState(false)
@@ -50,11 +50,8 @@ function App(): React.JSX.Element {
           void pickVault()
           return
         }
-        void (async () => {
-          const createdPath = await createNote('Inbox')
-          if (!createdPath) return
-          usePanesStore.getState().requestEditorFocus()
-        })()
+        usePanesStore.getState().openUntitledTab()
+        usePanesStore.getState().requestEditorFocus()
         return
       }
 
@@ -143,7 +140,7 @@ function App(): React.JSX.Element {
         setIsSearchOpen(true)
       }
     },
-    [createNote, navigate, pickVault, toggleSidebar]
+    [navigate, pickVault, toggleSidebar]
   )
 
   useWindowShortcuts({
@@ -172,13 +169,10 @@ function App(): React.JSX.Element {
         void pickVault()
         return
       }
-      void (async () => {
-        const createdPath = await createNote('Inbox')
-        if (!createdPath) return
-        usePanesStore.getState().requestEditorFocus()
-      })()
+      usePanesStore.getState().openUntitledTab()
+      usePanesStore.getState().requestEditorFocus()
     })
-  }, [createNote, pickVault])
+  }, [pickVault])
 
   // Detached window: fetch init data and open the tab
   useEffect(() => {

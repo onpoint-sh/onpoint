@@ -64,8 +64,8 @@ function CustomTitleBar({
               borderRadius: 'calc(var(--radius) - 2px)',
               transform: isMac ? 'translateY(1px)' : undefined
             }}
-            aria-label="Search notes"
-            title="Search notes"
+            aria-label="Search files"
+            title="Search files"
             onClick={onOpenSearch}
           >
             <Search className="size-4" />
@@ -76,8 +76,8 @@ function CustomTitleBar({
             type="button"
             className="app-no-drag inline-flex h-7 w-7 items-center justify-center rounded-[calc(var(--radius)-2px)] border border-transparent bg-transparent text-muted-foreground outline-none transition-[background-color,color,border-color] duration-[120ms] hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:shadow-[0_0_0_2px_color-mix(in_oklch,var(--ring)_50%,transparent)] disabled:pointer-events-none disabled:opacity-45"
             style={{ transform: isMac ? 'translateY(1px)' : undefined }}
-            aria-label="Create new note"
-            title="Create new note"
+            aria-label="Create new file"
+            title="Create new file"
             disabled={!canCreateNote}
             onClick={onCreateNote}
           >
