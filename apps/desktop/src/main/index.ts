@@ -15,7 +15,7 @@ import {
 import { windowRegistry, createWindowId } from './window/window-registry'
 import { registerWindowControls } from './window/register-window-controls'
 import { registerContextMenu } from './window/context-menu'
-import { setupApplicationMenu, restoreApplicationMenu } from './menu'
+import { setupApplicationMenu } from './menu'
 import { createShortcutService } from './shortcuts'
 import { registerNotesIpc } from './notes/ipc'
 import { copyNotesConfig, deleteNotesConfig } from './notes/store'
@@ -142,8 +142,7 @@ app.whenReady().then(() => {
   const unregisterNotesIpc = registerNotesIpc()
 
   const ghostModeService = createGhostModeService({
-    getWindows: () => windowRegistry.getAllWindows(),
-    onRestoreMenu: restoreApplicationMenu
+    getWindows: () => windowRegistry.getAllWindows()
   })
 
   const shortcutService = createShortcutService({
@@ -172,14 +171,15 @@ app.whenReady().then(() => {
   // Apply ghost mode to any window created after service init
   onWindowCreated = (window) => ghostModeService.applyToWindow(window)
 
-  void ghostModeService.initialize()
   void shortcutService.initialize()
 
-  // LSUIElement is true in Info.plist so the app starts without a dock icon.
-  // Show the dock icon on launch since ghost mode starts inactive.
-  if (app.dock) {
-    void app.dock.show()
-  }
+  // Ghost mode loads persisted state (defaults to active on first launch).
+  // If ghost mode is off, ensure the dock icon is visible.
+  void ghostModeService.initialize().then(() => {
+    if (!ghostModeService.isActive() && app.dock) {
+      void app.dock.show()
+    }
+  })
 
   // Restore windows from saved state, or create a default "main" window
   const windowIds = Object.keys(savedStates)

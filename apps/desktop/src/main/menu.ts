@@ -5,10 +5,7 @@ type MenuOptions = {
   onNewWindow: () => void
 }
 
-let cachedOptions: MenuOptions | null = null
-
 export function setupApplicationMenu(options: MenuOptions): void {
-  cachedOptions = options
   const isMac = process.platform === 'darwin'
 
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -135,10 +132,4 @@ export function setupApplicationMenu(options: MenuOptions): void {
 
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
-}
-
-export function restoreApplicationMenu(): void {
-  if (cachedOptions) {
-    setupApplicationMenu(cachedOptions)
-  }
 }
