@@ -1,7 +1,8 @@
 import {
   SHORTCUT_DEFINITIONS_BY_ID,
+  SHORTCUT_ACTION_IDS,
   type ShortcutActionId,
-  type ShortcutBindings
+  type ShortcutProfile
 } from '@onpoint/shared/shortcuts'
 import { acceleratorToSignature, normalizeAccelerator } from './normalize'
 
@@ -22,18 +23,28 @@ const RESERVED_SIGNATURES = new Set(
   )
 )
 
-export function validateShortcutBindings(bindings: ShortcutBindings): ShortcutValidationResult {
-  const seenSignatures = new Map<string, ShortcutActionId>()
+export function validateShortcutProfile(profile: ShortcutProfile): ShortcutValidationResult {
+  const seenGlobalSignatures = new Map<string, ShortcutActionId>()
 
-  for (const actionId of Object.keys(SHORTCUT_DEFINITIONS_BY_ID) as ShortcutActionId[]) {
-    const accelerator = bindings[actionId]
-    const normalizedAccelerator = normalizeAccelerator(accelerator)
+  for (const actionId of SHORTCUT_ACTION_IDS) {
+    const definition = SHORTCUT_DEFINITIONS_BY_ID[actionId]
+    const rule = profile.rules[actionId]
+
+    if (!rule) {
+      return {
+        ok: false,
+        actionId,
+        reason: `Shortcut for "${definition.label}" is missing.`
+      }
+    }
+
+    const normalizedAccelerator = normalizeAccelerator(rule.accelerator)
 
     if (!normalizedAccelerator) {
       return {
         ok: false,
         actionId,
-        reason: `Shortcut for "${SHORTCUT_DEFINITIONS_BY_ID[actionId].label}" is invalid.`
+        reason: `Shortcut for "${definition.label}" is invalid.`
       }
     }
 
@@ -43,7 +54,7 @@ export function validateShortcutBindings(bindings: ShortcutBindings): ShortcutVa
       return {
         ok: false,
         actionId,
-        reason: `Shortcut for "${SHORTCUT_DEFINITIONS_BY_ID[actionId].label}" is invalid.`
+        reason: `Shortcut for "${definition.label}" is invalid.`
       }
     }
 
@@ -55,18 +66,20 @@ export function validateShortcutBindings(bindings: ShortcutBindings): ShortcutVa
       }
     }
 
-    const conflictWith = seenSignatures.get(signature)
+    if (rule.scope !== 'global') continue
+
+    const conflictWith = seenGlobalSignatures.get(signature)
 
     if (conflictWith) {
       return {
         ok: false,
         actionId,
-        reason: `Shortcut conflicts with "${SHORTCUT_DEFINITIONS_BY_ID[conflictWith].label}".`,
+        reason: `Global shortcut conflicts with "${SHORTCUT_DEFINITIONS_BY_ID[conflictWith].label}".`,
         conflictWith
       }
     }
 
-    seenSignatures.set(signature, actionId)
+    seenGlobalSignatures.set(signature, actionId)
   }
 
   return { ok: true }

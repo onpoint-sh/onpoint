@@ -6,25 +6,58 @@ import {
 } from '@onpoint/shared/shortcut-accelerator'
 import {
   SHORTCUT_DEFINITIONS,
+  SHORTCUT_WHEN_PRESETS_BY_ID,
+  isShortcutActionId,
   type ShortcutActionId,
-  type ShortcutBindings,
-  type ShortcutDefinition
+  type ShortcutProfile,
+  type ShortcutRuleImport,
+  type ShortcutWhenPresetId
 } from '@onpoint/shared/shortcuts'
 import { Button } from '@onpoint/ui/button'
 import { useShortcutSettingsStore } from './shortcut-settings-store'
 
 type ShortcutsSettingsPanelProps = {
-  bindings: ShortcutBindings
+  profile: ShortcutProfile
   isLoading: boolean
+}
+
+type AdvancedImportRule = {
+  command: string
+  key: string
+  scope: string
+  when?: string
 }
 
 function scopeLabel(scope: 'window' | 'global'): string {
   return scope === 'global' ? 'Global' : 'Window'
 }
 
-function whenLabel(definition: ShortcutDefinition): string {
-  if (definition.scope === 'global') return 'App running (system-wide)'
-  return definition.allowInEditable ? 'Window focused (including text inputs)' : 'Window focused'
+function isShortcutScope(scope: unknown): scope is 'window' | 'global' {
+  return scope === 'window' || scope === 'global'
+}
+
+function presetLabel(when: string | undefined): string {
+  if (!when) return 'Always'
+
+  for (const preset of Object.values(SHORTCUT_WHEN_PRESETS_BY_ID)) {
+    if (preset.when === when) {
+      return preset.label
+    }
+  }
+
+  return 'Custom expression'
+}
+
+function getPresetIdByWhen(when: string | undefined): ShortcutWhenPresetId | null {
+  if (!when) return null
+
+  for (const preset of Object.values(SHORTCUT_WHEN_PRESETS_BY_ID)) {
+    if (preset.when === when) {
+      return preset.id
+    }
+  }
+
+  return null
 }
 
 function formatShortcutToken(token: string, platform: string): string {
@@ -82,12 +115,89 @@ function acceleratorToDisplayTokens(accelerator: string, platform: string): stri
     .filter((token) => token.length > 0)
 }
 
+function exportRulesToJson(profile: ShortcutProfile): string {
+  const rules: ShortcutRuleImport[] = SHORTCUT_DEFINITIONS.map((definition) => {
+    const rule = profile.rules[definition.id]
+    return {
+      command: definition.id,
+      key: rule.accelerator,
+      scope: rule.scope,
+      when: rule.when
+    }
+  })
+
+  return JSON.stringify(rules, null, 2)
+}
+
+function parseAdvancedRules(value: string): ShortcutRuleImport[] {
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error('Advanced JSON is not valid JSON.')
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Advanced JSON must be an array of shortcut rules.')
+  }
+
+  const rules: ShortcutRuleImport[] = []
+  const seenActions = new Set<ShortcutActionId>()
+
+  for (const item of parsed as AdvancedImportRule[]) {
+    if (!item || typeof item !== 'object') {
+      throw new Error('Each shortcut rule must be an object.')
+    }
+
+    if (!isShortcutActionId(item.command)) {
+      throw new Error(`Unknown command "${String(item.command)}".`)
+    }
+
+    if (seenActions.has(item.command)) {
+      throw new Error(`Duplicate command "${item.command}".`)
+    }
+
+    if (typeof item.key !== 'string' || item.key.trim().length === 0) {
+      throw new Error(`Command "${item.command}" has an invalid key.`)
+    }
+
+    if (!isShortcutScope(item.scope)) {
+      throw new Error(`Command "${item.command}" has an invalid scope.`)
+    }
+
+    if (item.when !== undefined && typeof item.when !== 'string') {
+      throw new Error(`Command "${item.command}" has an invalid when expression.`)
+    }
+
+    rules.push({
+      command: item.command,
+      key: item.key,
+      scope: item.scope,
+      when: item.when
+    })
+    seenActions.add(item.command)
+  }
+
+  for (const definition of SHORTCUT_DEFINITIONS) {
+    if (!seenActions.has(definition.id)) {
+      throw new Error(`Missing command "${definition.id}".`)
+    }
+  }
+
+  return rules
+}
+
 function ShortcutsSettingsPanel({
-  bindings,
+  profile,
   isLoading
 }: ShortcutsSettingsPanelProps): React.JSX.Element {
   const platform = window.windowControls.platform
   const [searchValue, setSearchValue] = useState('')
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [advancedValue, setAdvancedValue] = useState('')
+  const [advancedError, setAdvancedError] = useState<string | null>(null)
+
   const editingActionId = useShortcutSettingsStore((state) => state.editingActionId)
   const pendingActionId = useShortcutSettingsStore((state) => state.pendingActionId)
   const errorByAction = useShortcutSettingsStore((state) => state.errorByAction)
@@ -102,16 +212,17 @@ function ShortcutsSettingsPanel({
     if (!normalizedQuery) return definitions
 
     return definitions.filter((definition) => {
-      const binding = bindings[definition.id]
+      const rule = profile.rules[definition.id]
       return (
         definition.label.toLowerCase().includes(normalizedQuery) ||
         definition.description.toLowerCase().includes(normalizedQuery) ||
-        definition.scope.toLowerCase().includes(normalizedQuery) ||
+        rule.scope.toLowerCase().includes(normalizedQuery) ||
+        (rule.when ?? '').toLowerCase().includes(normalizedQuery) ||
         definition.defaultAccelerator.toLowerCase().includes(normalizedQuery) ||
-        binding.toLowerCase().includes(normalizedQuery)
+        rule.accelerator.toLowerCase().includes(normalizedQuery)
       )
     })
-  }, [bindings, definitions, searchValue])
+  }, [definitions, profile, searchValue])
 
   const handleStartCapture = (actionId: ShortcutActionId): void => {
     clearErrors()
@@ -148,7 +259,7 @@ function ShortcutsSettingsPanel({
     setPendingActionId(actionId)
 
     try {
-      const result = await window.shortcuts.update(actionId, accelerator)
+      const result = await window.shortcuts.update(actionId, { accelerator })
 
       if (!result.ok) {
         setError(actionId, result.reason)
@@ -157,6 +268,42 @@ function ShortcutsSettingsPanel({
 
       setError(actionId, null)
       setEditingActionId(null)
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  const handleScopeChange = async (
+    actionId: ShortcutActionId,
+    scope: 'window' | 'global'
+  ): Promise<void> => {
+    setPendingActionId(actionId)
+    setError(actionId, null)
+
+    try {
+      const result = await window.shortcuts.update(actionId, { scope })
+      if (!result.ok) {
+        setError(actionId, result.reason)
+      }
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  const handleWhenPresetChange = async (
+    actionId: ShortcutActionId,
+    presetId: ShortcutWhenPresetId
+  ): Promise<void> => {
+    const preset = SHORTCUT_WHEN_PRESETS_BY_ID[presetId]
+
+    setPendingActionId(actionId)
+    setError(actionId, null)
+
+    try {
+      const result = await window.shortcuts.update(actionId, { when: preset.when })
+      if (!result.ok) {
+        setError(actionId, result.reason)
+      }
     } finally {
       setPendingActionId(null)
     }
@@ -190,6 +337,40 @@ function ShortcutsSettingsPanel({
     }
   }
 
+  const handleOpenAdvanced = (): void => {
+    setAdvancedError(null)
+    setAdvancedValue(exportRulesToJson(profile))
+    setIsAdvancedOpen(true)
+  }
+
+  const handleApplyAdvanced = async (): Promise<void> => {
+    setAdvancedError(null)
+
+    let rules: ShortcutRuleImport[]
+
+    try {
+      rules = parseAdvancedRules(advancedValue)
+    } catch (error) {
+      setAdvancedError((error as Error).message)
+      return
+    }
+
+    setPendingActionId('all')
+    clearErrors()
+
+    try {
+      const result = await window.shortcuts.replaceAll(rules)
+      if (!result.ok) {
+        setAdvancedError(result.reason)
+        return
+      }
+
+      setIsAdvancedOpen(false)
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
   return (
     <section className="shortcuts-vscode-panel">
       <div className="shortcuts-vscode-header">
@@ -211,17 +392,29 @@ function ShortcutsSettingsPanel({
           </span>
           <p className="shortcuts-vscode-subtitle">Press Enter to capture, Escape to cancel.</p>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="settings-pill-button shortcuts-vscode-reset-all"
-          onClick={() => void handleResetAll()}
-          disabled={isLoading || pendingActionId !== null}
-        >
-          <RotateCcw className="size-4" />
-          Reset all
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="settings-pill-button"
+            onClick={handleOpenAdvanced}
+            disabled={isLoading || pendingActionId !== null}
+          >
+            Advanced JSON
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="settings-pill-button shortcuts-vscode-reset-all"
+            onClick={() => void handleResetAll()}
+            disabled={isLoading || pendingActionId !== null}
+          >
+            <RotateCcw className="size-4" />
+            Reset all
+          </Button>
+        </div>
       </div>
 
       {filteredDefinitions.length === 0 ? (
@@ -233,12 +426,13 @@ function ShortcutsSettingsPanel({
           const isEditing = editingActionId === definition.id
           const isPending = pendingActionId === definition.id
           const isAnyPending = pendingActionId !== null
-          const binding = bindings[definition.id]
+          const rule = profile.rules[definition.id]
           const defaultBinding = definition.defaultAccelerator
-          const isCustomized = binding !== defaultBinding
+          const isCustomized = rule.source === 'user'
           const errorMessage = errorByAction[definition.id]
-          const bindingDisplayTokens = acceleratorToDisplayTokens(binding, platform)
+          const bindingDisplayTokens = acceleratorToDisplayTokens(rule.accelerator, platform)
           const defaultDisplayTokens = acceleratorToDisplayTokens(defaultBinding, platform)
+          const selectedPresetId = getPresetIdByWhen(rule.when)
 
           return (
             <article
@@ -250,7 +444,7 @@ function ShortcutsSettingsPanel({
               <div className="shortcuts-vscode-main">
                 <p className="shortcuts-command-title">
                   {definition.label}
-                  <span className="shortcuts-scope-pill">{scopeLabel(definition.scope)}</span>
+                  <span className="shortcuts-scope-pill">{scopeLabel(rule.scope)}</span>
                 </p>
                 <p className="shortcuts-command-description">{definition.description}</p>
                 <p className="shortcuts-default">
@@ -265,7 +459,7 @@ function ShortcutsSettingsPanel({
                   ))}
                 </p>
                 <p className="shortcuts-meta-line">
-                  <span>{whenLabel(definition)}</span>
+                  <span>{presetLabel(rule.when)}</span>
                   <span
                     className={
                       isCustomized
@@ -273,9 +467,12 @@ function ShortcutsSettingsPanel({
                         : 'shortcuts-source-badge'
                     }
                   >
-                    {isCustomized ? 'User' : 'Default'}
+                    {isCustomized ? 'User' : 'System'}
                   </span>
                 </p>
+                {selectedPresetId === null && rule.when ? (
+                  <p className="shortcuts-default">When: {rule.when}</p>
+                ) : null}
                 {errorMessage ? <p className="shortcuts-command-error">{errorMessage}</p> : null}
               </div>
 
@@ -323,6 +520,44 @@ function ShortcutsSettingsPanel({
                   </button>
                 )}
 
+                <select
+                  className="settings-pill-button app-no-drag"
+                  value={selectedPresetId ?? ''}
+                  onChange={(event) => {
+                    const nextPresetId = event.target.value as ShortcutWhenPresetId
+                    if (!nextPresetId) return
+                    void handleWhenPresetChange(definition.id, nextPresetId)
+                  }}
+                  disabled={isLoading || isAnyPending || definition.whenPresets.length === 0}
+                >
+                  {selectedPresetId === null ? <option value="">Custom expression</option> : null}
+                  {definition.whenPresets.map((presetId) => (
+                    <option key={`${definition.id}-${presetId}`} value={presetId}>
+                      {SHORTCUT_WHEN_PRESETS_BY_ID[presetId].label}
+                    </option>
+                  ))}
+                </select>
+
+                {definition.allowedScopes.length > 1 ? (
+                  <select
+                    className="settings-pill-button app-no-drag"
+                    value={rule.scope}
+                    onChange={(event) => {
+                      void handleScopeChange(
+                        definition.id,
+                        event.target.value as 'window' | 'global'
+                      )
+                    }}
+                    disabled={isLoading || isAnyPending}
+                  >
+                    {definition.allowedScopes.map((scope) => (
+                      <option key={`${definition.id}-${scope}`} value={scope}>
+                        {scopeLabel(scope)}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+
                 <button
                   type="button"
                   className="app-no-drag shortcuts-reset-row"
@@ -338,6 +573,53 @@ function ShortcutsSettingsPanel({
           )
         })}
       </div>
+
+      {isAdvancedOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5"
+          role="dialog"
+        >
+          <div className="flex max-h-[85vh] w-full max-w-[56rem] flex-col gap-3 rounded-[0.9rem] border border-border bg-background p-4 shadow-2xl">
+            <div>
+              <h3 className="text-[1rem] font-semibold text-foreground">Advanced JSON</h3>
+              <p className="text-[0.8rem] text-muted-foreground">
+                Edit shortcut rules as JSON with fields: command, key, when, scope.
+              </p>
+            </div>
+
+            <textarea
+              value={advancedValue}
+              onChange={(event) => setAdvancedValue(event.target.value)}
+              className="min-h-[22rem] w-full flex-1 rounded-[0.7rem] border border-border bg-[color-mix(in_oklch,var(--background)_92%,black_8%)] p-3 font-mono text-[0.79rem] text-foreground outline-none focus-visible:border-ring"
+              spellCheck={false}
+            />
+
+            {advancedError ? (
+              <p className="text-[0.78rem] text-destructive">{advancedError}</p>
+            ) : null}
+
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAdvancedOpen(false)}
+                disabled={pendingActionId !== null}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handleApplyAdvanced()}
+                disabled={pendingActionId !== null}
+              >
+                Apply
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

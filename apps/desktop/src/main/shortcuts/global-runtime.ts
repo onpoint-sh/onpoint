@@ -1,9 +1,5 @@
 import { globalShortcut } from 'electron'
-import {
-  type ShortcutActionId,
-  type ShortcutBindings,
-  type ShortcutDefinition
-} from '@onpoint/shared/shortcuts'
+import { type ShortcutActionId, type ShortcutRule } from '@onpoint/shared/shortcuts'
 
 type ApplyGlobalBindingsResult =
   | { ok: true }
@@ -24,14 +20,11 @@ class GlobalShortcutRuntime {
     this.onAction = options.onAction
   }
 
-  apply(
-    bindings: ShortcutBindings,
-    globalDefinitions: readonly ShortcutDefinition[]
-  ): ApplyGlobalBindingsResult {
+  apply(globalRules: readonly ShortcutRule[]): ApplyGlobalBindingsResult {
     const nextBindings = new Map<ShortcutActionId, string>()
 
-    for (const definition of globalDefinitions) {
-      nextBindings.set(definition.id, bindings[definition.id])
+    for (const rule of globalRules) {
+      nextBindings.set(rule.actionId, rule.accelerator)
     }
 
     const previousBindings = new Map(this.registeredBindings)

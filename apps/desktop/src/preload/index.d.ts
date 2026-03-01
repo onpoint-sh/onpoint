@@ -1,13 +1,16 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import {
   type ShortcutActionId,
-  type ShortcutBindings,
+  type ShortcutProfile,
+  type ShortcutRuleImport,
+  type ShortcutRulePatch,
   type ShortcutUpdateResult
 } from '@onpoint/shared/shortcuts'
 import type {
   ArchiveNoteResult,
   CreateFolderResult,
   CreateNoteInput,
+  DeleteFolderResult,
   DeleteNoteResult,
   MoveNoteResult,
   NoteDocument,
@@ -43,12 +46,14 @@ type WindowControlsAPI = {
 }
 
 type ShortcutsAPI = {
-  list: () => Promise<ShortcutBindings>
-  update: (actionId: ShortcutActionId, accelerator: string) => Promise<ShortcutUpdateResult>
+  list: () => Promise<ShortcutProfile>
+  update: (actionId: ShortcutActionId, patch: ShortcutRulePatch) => Promise<ShortcutUpdateResult>
   reset: (actionId: ShortcutActionId) => Promise<void>
   resetAll: () => Promise<void>
+  replaceAll: (rules: ShortcutRuleImport[]) => Promise<ShortcutUpdateResult>
+  execute: (actionId: ShortcutActionId) => Promise<void>
   onGlobalAction: (callback: (actionId: ShortcutActionId) => void) => () => void
-  onBindingsChanged: (callback: (bindings: ShortcutBindings) => void) => () => void
+  onBindingsChanged: (callback: (profile: ShortcutProfile) => void) => () => void
 }
 
 type GhostModeConfig = {
@@ -73,6 +78,7 @@ type NotesAPI = {
   saveNoteAs: (content: string) => Promise<SaveNoteAsResult | null>
   renameNote: (relativePath: string, requestedTitle: string) => Promise<RenameNoteResult>
   deleteNote: (relativePath: string) => Promise<DeleteNoteResult>
+  deleteFolder: (relativePath: string) => Promise<DeleteFolderResult>
   archiveNote: (relativePath: string) => Promise<ArchiveNoteResult>
   moveNote: (fromPath: string, toPath: string) => Promise<MoveNoteResult>
   createFolder: (relativePath: string) => Promise<CreateFolderResult>

@@ -10,6 +10,5 @@ export const shortcutDefinitions: readonly ShortcutDefinition[] = SHORTCUT_DEFIN
 export const shortcutDefinitionsById: Record<ShortcutActionId, ShortcutDefinition> =
   SHORTCUT_DEFINITIONS_BY_ID
 
-export const globalShortcutDefinitions: readonly ShortcutDefinition[] = SHORTCUT_DEFINITIONS.filter(
-  (definition) => definition.scope === 'global'
-)
+export const globalCapableShortcutDefinitions: readonly ShortcutDefinition[] =
+  SHORTCUT_DEFINITIONS.filter((definition) => definition.allowedScopes.includes('global'))

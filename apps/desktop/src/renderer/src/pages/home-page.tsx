@@ -10,6 +10,7 @@ import { useNotesStore } from '@/stores/notes-store'
 import { DEFAULT_SETTINGS_SECTION_ID, getSettingsSectionPath } from '@/pages/settings-sections'
 import { EditorPane } from '@/components/notes/editor-pane'
 import { CloseConfirmDialog } from '@/components/notes/pane-tab-bar'
+import { BottomPanel } from '@/components/bottom-panel/bottom-panel'
 import { tabSaveCallbacks } from '@/lib/tab-save-callbacks'
 
 function WelcomePage(): React.JSX.Element {
@@ -199,14 +200,17 @@ function HomePage(): React.JSX.Element {
 
   return (
     <>
-      <div className="mosaic-container h-full">
-        <Mosaic<string>
-          renderTile={renderTile}
-          value={layout}
-          onChange={handleChange}
-          dragAndDropManager={dndManager}
-          className=""
-        />
+      <div className="workspace-with-bottom-panel">
+        <div className="workspace-main-area mosaic-container">
+          <Mosaic<string>
+            renderTile={renderTile}
+            value={layout}
+            onChange={handleChange}
+            dragAndDropManager={dndManager}
+            className=""
+          />
+        </div>
+        <BottomPanel />
       </div>
       <TabCloseGuard />
       <WindowCloseGuard />

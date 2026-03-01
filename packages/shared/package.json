@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./shortcuts": "./src/shortcuts.ts",
     "./shortcut-accelerator": "./src/shortcut-accelerator.ts",
+    "./shortcut-when": "./src/shortcut-when.ts",
     "./notes": "./src/notes.ts",
     "./frontmatter": "./src/frontmatter.ts",
     "./window": "./src/window.ts",

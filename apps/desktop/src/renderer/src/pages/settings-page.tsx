@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
-import { type ShortcutBindings } from '@onpoint/shared/shortcuts'
+import { type ShortcutProfile } from '@onpoint/shared/shortcuts'
 import {
   DEFAULT_GHOST_MODE_CONFIG,
   GHOST_MODE_OPACITY_MIN,
@@ -16,7 +16,7 @@ import { LIGHT_THEMES, DARK_THEMES, type ThemeDefinition, type ThemeMode } from 
 
 type SettingsPageProps = {
   section: SettingsSectionId
-  bindings: ShortcutBindings
+  profile: ShortcutProfile
   isShortcutsLoading: boolean
 }
 
@@ -130,7 +130,7 @@ function IconThemeSwatch({
 
 function SettingsPage({
   section,
-  bindings,
+  profile,
   isShortcutsLoading
 }: SettingsPageProps): React.JSX.Element {
   const [ghostOpacity, setGhostOpacity] = useState(DEFAULT_GHOST_MODE_CONFIG.opacity)
@@ -270,7 +270,7 @@ function SettingsPage({
       {section === 'keyboard-shortcuts' ? (
         <section className="settings-section scroll-mt-3 min-h-0 flex-1 flex flex-col">
           <h2 className="settings-section-title">Keyboard</h2>
-          <ShortcutsSettingsPanel bindings={bindings} isLoading={isShortcutsLoading} />
+          <ShortcutsSettingsPanel profile={profile} isLoading={isShortcutsLoading} />
         </section>
       ) : null}
 

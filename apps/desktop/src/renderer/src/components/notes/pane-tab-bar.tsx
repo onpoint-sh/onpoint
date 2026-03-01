@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
-import { X, Pin } from 'lucide-react'
+import { Pin } from 'lucide-react'
 import { useIconThemeAdapter } from '@onpoint/icon-themes'
 import { isUntitledPath } from '@onpoint/shared/notes'
 import { getFileExtension } from '@/lib/file-types'
+import { isTerminalEditorPath } from '@/lib/terminal-editor-tab'
+import { TabCloseButton } from '@/components/common/tab-close-button'
 import { useIconThemeStore } from '@/stores/icon-theme-store'
 import { usePanesStore, findAdjacentPaneId } from '@/stores/panes-store'
 import { useNotesStore } from '@/stores/notes-store'
@@ -47,7 +49,7 @@ function DraggableTab({
   onClick: () => void
   onMouseDown: (e: React.MouseEvent) => void
   onContextMenu: (e: React.MouseEvent) => void
-  onClose: (e: React.MouseEvent) => void
+  onClose: () => void
 }): React.JSX.Element {
   const reorderTab = usePanesStore((s) => s.reorderTab)
   const moveTabToPane = usePanesStore((s) => s.moveTabToPane)
@@ -59,6 +61,7 @@ function DraggableTab({
     item: { tabId, paneId, index },
     end(_item, monitor) {
       if (monitor.didDrop()) return
+      if (isTerminalEditorPath(relativePath)) return
       void window.windowControls.detachTab(relativePath).then((detached) => {
         if (detached) {
           usePanesStore.getState().closeTab(paneId, tabId)
@@ -111,9 +114,12 @@ function DraggableTab({
       )}
       <span className="pane-tab-bar-tab-label">{label}</span>
       <span className="pane-tab-bar-tab-dirty-dot" />
-      <button className="pane-tab-bar-tab-close" onClick={onClose} tabIndex={-1}>
-        <X className="pane-tab-bar-close-x size-3" />
-      </button>
+      <TabCloseButton
+        className="pane-tab-bar-tab-close"
+        iconClassName="pane-tab-bar-close-x size-3"
+        label={`Close ${label}`}
+        onClick={onClose}
+      />
     </div>
   )
 }
@@ -152,6 +158,7 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
 
   const resolveTitle = useCallback(
     (relativePath: string): string => {
+      if (isTerminalEditorPath(relativePath)) return 'Terminal'
       if (isUntitledPath(relativePath)) return 'Untitled'
       const ext = getFileExtension(relativePath)
       const note = notes.find((n) => n.relativePath === relativePath)
@@ -178,8 +185,7 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
   )
 
   const handleTabClose = useCallback(
-    (e: React.MouseEvent, tabId: string) => {
-      e.stopPropagation()
+    (tabId: string) => {
       handleRequestClose(tabId)
     },
     [handleRequestClose]
@@ -434,7 +440,7 @@ function PaneTabBar({ paneId }: PaneTabBarProps): React.JSX.Element | null {
               onClick={() => handleTabClick(tab.id)}
               onMouseDown={(e) => handleMouseDown(e, tab.id)}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
-              onClose={(e) => handleTabClose(e, tab.id)}
+              onClose={() => handleTabClose(tab.id)}
             />
           )
         })}

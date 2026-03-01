@@ -1,5 +1,6 @@
 export * from './shortcuts'
 export * from './shortcut-accelerator'
+export * from './shortcut-when'
 export * from './notes'
 export * from './frontmatter'
 export * from './window'

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
+import { promises as fs } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import {
+  createVaultFolder,
+  deleteVaultFolder,
+  moveVaultNote,
+  renameVaultFolder,
   sanitizeRelativePath,
   isPathInsideRoot,
   normalizeNoteTitle,
@@ -115,5 +122,62 @@ describe('resolveNotePath', () => {
 
   it('throws for paths escaping vault', () => {
     expect(() => resolveNotePath('/vault', '../etc/passwd')).toThrow()
+  })
+})
+
+describe('vault operation validation', () => {
+  it('rejects creating an already existing folder', async () => {
+    const createdVault = await fs.mkdtemp(join(tmpdir(), 'onpoint-vault-'))
+    const vault = await fs.realpath(createdVault)
+    try {
+      await createVaultFolder(vault, 'docs')
+      await expect(createVaultFolder(vault, 'docs')).rejects.toThrow(
+        'already exists at this location'
+      )
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true })
+    }
+  })
+
+  it('deletes an empty folder', async () => {
+    const createdVault = await fs.mkdtemp(join(tmpdir(), 'onpoint-vault-'))
+    const vault = await fs.realpath(createdVault)
+    try {
+      await fs.mkdir(join(vault, 'docs'))
+      await expect(deleteVaultFolder(vault, 'docs')).resolves.toEqual({ deletedPath: 'docs' })
+      await expect(fs.stat(join(vault, 'docs'))).rejects.toThrow()
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects moving a note onto an existing target path', async () => {
+    const createdVault = await fs.mkdtemp(join(tmpdir(), 'onpoint-vault-'))
+    const vault = await fs.realpath(createdVault)
+    try {
+      await fs.writeFile(join(vault, 'source.md'), '# Source\n', 'utf-8')
+      await fs.writeFile(join(vault, 'target.md'), '# Target\n', 'utf-8')
+
+      await expect(moveVaultNote(vault, 'source.md', 'target.md')).rejects.toThrow(
+        'already exists at this location'
+      )
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects renaming a folder onto an existing destination path', async () => {
+    const createdVault = await fs.mkdtemp(join(tmpdir(), 'onpoint-vault-'))
+    const vault = await fs.realpath(createdVault)
+    try {
+      await fs.mkdir(join(vault, 'from'))
+      await fs.mkdir(join(vault, 'to'))
+
+      await expect(renameVaultFolder(vault, 'from', 'to')).rejects.toThrow(
+        'already exists at this location'
+      )
+    } finally {
+      await fs.rm(vault, { recursive: true, force: true })
+    }
   })
 })

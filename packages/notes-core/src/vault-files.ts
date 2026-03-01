@@ -14,6 +14,7 @@ import type {
   ArchiveNoteResult,
   CreateFolderResult,
   CreateNoteInput,
+  DeleteFolderResult,
   DeleteNoteResult,
   MoveNoteResult,
   NoteDocument,
@@ -40,8 +41,31 @@ import {
   searchVaultContentV2 as searchVaultContentV2Core,
   searchVaultTitlesV2 as searchVaultTitlesV2Core
 } from './search-engine'
+import { isValidBasename } from './file-name-validation'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
+
+function escapeMessageName(name: string): string {
+  return name.replace(/\*/g, '\\*')
+}
+
+function formatAlreadyExistsError(name: string): string {
+  return `A file or folder "${escapeMessageName(name)}" already exists at this location. Please choose a different name.`
+}
+
+function formatInvalidNameError(name: string): string {
+  return `The name "${escapeMessageName(name)}" is not valid as a file or folder name. Please choose a different name.`
+}
+
+async function pathExists(absolutePath: string): Promise<boolean> {
+  try {
+    await fs.access(absolutePath)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
 
 export type DeleteStrategy = (absolutePath: string) => Promise<void>
 
@@ -115,6 +139,11 @@ export function sanitizeRelativePath(relativePath: string): string {
 
   if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
     throw new Error('Invalid note path.')
+  }
+
+  const isWindows = process.platform === 'win32'
+  if (segments.some((segment) => !isValidBasename(segment, isWindows))) {
+    throw new Error(formatInvalidNameError(normalizedPath))
   }
 
   return segments.join('/')
@@ -508,19 +537,31 @@ export async function moveVaultNote(
   toRelativePath: string
 ): Promise<MoveNoteResult> {
   const resolvedVaultPath = await ensureVaultPath(vaultPath)
-  const fromAbsolute = resolveNotePath(resolvedVaultPath, fromRelativePath)
+  const sanitizedFromPath = sanitizeRelativePath(fromRelativePath)
+  const fromAbsolute = resolveNotePath(resolvedVaultPath, sanitizedFromPath)
   await assertRealPathInsideVault(fromAbsolute, resolvedVaultPath)
   const toSanitized = sanitizeRelativePath(toRelativePath)
+  if (toSanitized === sanitizedFromPath) {
+    const fileStats = await fs.stat(fromAbsolute)
+    return {
+      relativePath: sanitizedFromPath,
+      mtimeMs: fileStats.mtimeMs
+    }
+  }
   const toAbsolute = resolve(resolvedVaultPath, toSanitized)
 
   if (!isPathInsideRoot(resolvedVaultPath, toAbsolute)) {
     throw new Error('Invalid destination path.')
   }
+
+  if (await pathExists(toAbsolute)) {
+    throw new Error(formatAlreadyExistsError(toSanitized))
+  }
+
   await fs.mkdir(dirname(toAbsolute), { recursive: true })
   await assertParentRealPathInsideVault(toAbsolute, resolvedVaultPath)
   await fs.rename(fromAbsolute, toAbsolute)
 
-  const sanitizedFromPath = sanitizeRelativePath(fromRelativePath)
   const nextRelativePath = toPosixPath(relative(resolvedVaultPath, toAbsolute))
   moveCacheEntry(resolvedVaultPath, sanitizedFromPath, nextRelativePath)
 
@@ -552,9 +593,43 @@ export async function createVaultFolder(
     throw new Error('Invalid folder path.')
   }
 
+  if (await pathExists(absolutePath)) {
+    throw new Error(formatAlreadyExistsError(sanitizedPath))
+  }
+
   await fs.mkdir(absolutePath, { recursive: true })
   await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
   return { relativePath: toPosixPath(relative(resolvedVaultPath, absolutePath)) }
+}
+
+export async function deleteVaultFolder(
+  vaultPath: string,
+  relativePath: string,
+  deleteStrategy?: DeleteStrategy
+): Promise<DeleteFolderResult> {
+  const resolvedVaultPath = await ensureVaultPath(vaultPath)
+  const sanitizedPath = sanitizeRelativePath(relativePath)
+  const absolutePath = resolve(resolvedVaultPath, sanitizedPath)
+
+  if (!isPathInsideRoot(resolvedVaultPath, absolutePath)) {
+    throw new Error('Invalid folder path.')
+  }
+
+  const stats = await fs.stat(absolutePath)
+  if (!stats.isDirectory()) {
+    throw new Error('Source path is not a directory.')
+  }
+
+  await assertRealPathInsideVault(absolutePath, resolvedVaultPath)
+
+  if (deleteStrategy) {
+    await deleteStrategy(absolutePath)
+  } else {
+    await fs.rmdir(absolutePath)
+  }
+
+  invalidateVaultCache(resolvedVaultPath)
+  return { deletedPath: sanitizedPath }
 }
 
 export type NoteSortField = 'mtime' | 'title' | 'path'
@@ -623,6 +698,10 @@ export async function renameVaultFolder(
   const fromAbsolute = resolve(resolvedVaultPath, fromSanitized)
   const toAbsolute = resolve(resolvedVaultPath, toSanitized)
 
+  if (fromSanitized === toSanitized) {
+    return { relativePath: fromSanitized }
+  }
+
   if (!isPathInsideRoot(resolvedVaultPath, fromAbsolute)) {
     throw new Error('Invalid source folder path.')
   }
@@ -635,6 +714,10 @@ export async function renameVaultFolder(
 
   if (!stats.isDirectory()) {
     throw new Error('Source path is not a directory.')
+  }
+
+  if (await pathExists(toAbsolute)) {
+    throw new Error(formatAlreadyExistsError(toSanitized))
   }
 
   await assertRealPathInsideVault(fromAbsolute, resolvedVaultPath)

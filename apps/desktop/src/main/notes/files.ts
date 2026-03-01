@@ -1,6 +1,9 @@
 import { shell } from 'electron'
-import { deleteVaultNote as coreDeleteVaultNote } from '@onpoint/notes-core/vault-files'
-import type { DeleteNoteResult } from '@onpoint/shared/notes'
+import {
+  deleteVaultFolder as coreDeleteVaultFolder,
+  deleteVaultNote as coreDeleteVaultNote
+} from '@onpoint/notes-core/vault-files'
+import type { DeleteFolderResult, DeleteNoteResult } from '@onpoint/shared/notes'
 
 export {
   archiveVaultNote,
@@ -25,4 +28,11 @@ export async function deleteVaultNote(
   relativePath: string
 ): Promise<DeleteNoteResult> {
   return coreDeleteVaultNote(vaultPath, relativePath, (path) => shell.trashItem(path))
+}
+
+export async function deleteVaultFolder(
+  vaultPath: string,
+  relativePath: string
+): Promise<DeleteFolderResult> {
+  return coreDeleteVaultFolder(vaultPath, relativePath, (path) => shell.trashItem(path))
 }

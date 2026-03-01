@@ -2,11 +2,15 @@ import { useCallback, useRef, useState } from 'react'
 import { useDragLayer, useDrop } from 'react-dnd'
 import type { MosaicDirection } from 'react-mosaic-component'
 import { usePanesStore } from '@/stores/panes-store'
+import { useBottomPanelStore } from '@/stores/bottom-panel-store'
 import { getFileType } from '@/lib/file-types'
+import { BOTTOM_PANEL_TAB_DND_TYPE, type BottomPanelTabDragItem } from '@/lib/bottom-panel-dnd'
+import { createTerminalEditorPath, isTerminalEditorPath } from '@/lib/terminal-editor-tab'
 import { PaneTabBar, TAB_DND_TYPE, type TabDragItem } from './pane-tab-bar'
 import { PaneEditor } from './pane-editor'
 import { MermaidEditor } from './mermaid-editor'
 import { CodeEditor } from './code-editor'
+import { TerminalPaneEditor } from './terminal-pane-editor'
 
 type EdgePosition = 'left' | 'right' | 'top' | 'bottom'
 
@@ -25,20 +29,24 @@ function SplitDropOverlay({
   onDrop
 }: {
   paneId: string
-  onDrop: (item: TabDragItem, position: EdgePosition) => void
+  onDrop: (
+    item: TabDragItem | BottomPanelTabDragItem,
+    position: EdgePosition,
+    itemType: string | symbol | null
+  ) => void
 }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const edgeRef = useRef<EdgePosition | null>(null)
   const [activeEdge, setActiveEdge] = useState<EdgePosition | null>(null)
 
   const [{ isOver, canDrop }, dropRef] = useDrop<
-    TabDragItem,
+    TabDragItem | BottomPanelTabDragItem,
     unknown,
     { isOver: boolean; canDrop: boolean }
   >({
-    accept: TAB_DND_TYPE,
-    canDrop(item) {
-      if (item.paneId === paneId) {
+    accept: [TAB_DND_TYPE, BOTTOM_PANEL_TAB_DND_TYPE],
+    canDrop(item, monitor) {
+      if (monitor.getItemType() === TAB_DND_TYPE && item.paneId === paneId) {
         const pane = usePanesStore.getState().panes[paneId]
         if (pane && pane.tabs.length <= 1) return false
       }
@@ -54,8 +62,8 @@ function SplitDropOverlay({
         setActiveEdge(edge)
       }
     },
-    drop(item) {
-      if (edgeRef.current) onDrop(item, edgeRef.current)
+    drop(item, monitor) {
+      if (edgeRef.current) onDrop(item, edgeRef.current, monitor.getItemType())
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
@@ -95,7 +103,10 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
 
   // Detect if a tab drag is in progress (to enable edge drop zones)
   const isTabDragging = useDragLayer(
-    (monitor) => monitor.isDragging() && monitor.getItemType() === TAB_DND_TYPE
+    (monitor) =>
+      monitor.isDragging() &&
+      (monitor.getItemType() === TAB_DND_TYPE ||
+        monitor.getItemType() === BOTTOM_PANEL_TAB_DND_TYPE)
   )
 
   const activeTab = pane?.tabs.find((t) => t.id === pane.activeTabId)
@@ -116,11 +127,30 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
   }, [consumeEditorFocusRequest, paneId, scopedFocusRequestId])
 
   // Center drop: move tab into this pane (no split)
-  const [{ isOver }, centerDropRef] = useDrop<TabDragItem, unknown, { isOver: boolean }>({
-    accept: TAB_DND_TYPE,
-    drop(item) {
-      if (item.paneId !== paneId) {
-        moveTabToPane(item.paneId, item.tabId, paneId)
+  const [{ isOver }, centerDropRef] = useDrop<
+    TabDragItem | BottomPanelTabDragItem,
+    unknown,
+    { isOver: boolean }
+  >({
+    accept: [TAB_DND_TYPE, BOTTOM_PANEL_TAB_DND_TYPE],
+    drop(item, monitor) {
+      const itemType = monitor.getItemType()
+      if (itemType === TAB_DND_TYPE) {
+        if (item.paneId !== paneId) {
+          moveTabToPane(item.paneId, item.tabId, paneId)
+        }
+        return
+      }
+
+      if (itemType === BOTTOM_PANEL_TAB_DND_TYPE) {
+        const bottomPanelState = useBottomPanelStore.getState()
+        const sourcePane = bottomPanelState.panes[item.paneId]
+        const sourceTab = sourcePane?.tabs.find((candidate) => candidate.id === item.tabId)
+        if (!sourceTab || sourceTab.viewId !== 'terminal') return
+
+        const terminalPath = createTerminalEditorPath(sourceTab.id)
+        usePanesStore.getState().openTab(terminalPath, paneId)
+        bottomPanelState.closeTab(item.paneId, item.tabId)
       }
     },
     collect: (monitor) => ({
@@ -129,7 +159,11 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
   })
 
   const handleEdgeDrop = useCallback(
-    (item: TabDragItem, position: EdgePosition) => {
+    (
+      item: TabDragItem | BottomPanelTabDragItem,
+      position: EdgePosition,
+      itemType: string | symbol | null
+    ) => {
       const directionMap: Record<EdgePosition, MosaicDirection> = {
         left: 'row',
         right: 'row',
@@ -142,13 +176,36 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
         top: 'first',
         bottom: 'second'
       }
-      splitPaneWithTab(
-        paneId,
-        directionMap[position],
-        positionMap[position],
-        item.paneId,
-        item.tabId
-      )
+
+      if (itemType === TAB_DND_TYPE) {
+        splitPaneWithTab(
+          paneId,
+          directionMap[position],
+          positionMap[position],
+          item.paneId,
+          item.tabId
+        )
+        return
+      }
+
+      const bottomPanelState = useBottomPanelStore.getState()
+      const sourcePane = bottomPanelState.panes[item.paneId]
+      const sourceTab = sourcePane?.tabs.find((candidate) => candidate.id === item.tabId)
+      if (!sourceTab || sourceTab.viewId !== 'terminal') return
+
+      const newPaneId = usePanesStore.getState().splitPane(paneId, directionMap[position])
+      if (!newPaneId) return
+
+      const panesState = usePanesStore.getState()
+      const newPane = panesState.panes[newPaneId]
+      const duplicatedTabId = newPane?.activeTabId ?? null
+      const terminalPath = createTerminalEditorPath(sourceTab.id)
+
+      panesState.openTab(terminalPath, newPaneId)
+      if (duplicatedTabId) {
+        panesState.closeTab(newPaneId, duplicatedTabId)
+      }
+      bottomPanelState.closeTab(item.paneId, item.tabId)
     },
     [paneId, splitPaneWithTab]
   )
@@ -177,6 +234,10 @@ function EditorPane({ paneId }: EditorPaneProps): React.JSX.Element {
         data-dragging={isTabDragging}
       >
         {(() => {
+          if (isTerminalEditorPath(relativePath)) {
+            return <TerminalPaneEditor key={activeTab?.id} relativePath={relativePath} />
+          }
+
           const fileType = relativePath ? getFileType(relativePath) : 'markdown'
           if (fileType === 'mermaid') {
             return (

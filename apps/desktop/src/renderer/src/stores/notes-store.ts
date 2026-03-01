@@ -13,6 +13,7 @@ export type NotesStoreState = {
   createNote: (parentRelativePath?: string) => Promise<string | null>
   renameNote: (relativePath: string, requestedTitle: string) => Promise<void>
   deleteNote: (relativePath: string) => Promise<void>
+  deleteFolder: (relativePath: string) => Promise<void>
   archiveNote: (relativePath: string) => Promise<void>
   moveNote: (fromPath: string, toPath: string) => Promise<void>
   createFolder: (relativePath: string) => Promise<string | null>
@@ -181,6 +182,31 @@ export const useNotesStore = create<NotesStoreState>()((set, get) => ({
       set({
         isLoading: false,
         error: errorMessage(error, 'Failed to delete file.')
+      })
+    }
+  },
+
+  deleteFolder: async (relativePath: string) => {
+    set({ isLoading: true, error: null })
+    const folderPrefix = `${relativePath}/`
+    const notePathsToClose = get()
+      .notes.filter((note) => note.relativePath.startsWith(folderPrefix))
+      .map((note) => note.relativePath)
+
+    try {
+      await window.notes.deleteFolder(relativePath)
+      const notes = await window.notes.listNotes()
+      const config = await window.notes.getConfig()
+
+      set({ config, notes, isLoading: false, error: null })
+
+      for (const notePath of notePathsToClose) {
+        usePanesStore.getState().removeTabsByPath(notePath)
+      }
+    } catch (error) {
+      set({
+        isLoading: false,
+        error: errorMessage(error, 'Failed to delete folder.')
       })
     }
   },

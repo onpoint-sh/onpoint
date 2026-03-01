@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { getDefaultShortcutBindings, type ShortcutActionId } from '@onpoint/shared/shortcuts'
+import { getDefaultShortcutProfile, type ShortcutActionId } from '@onpoint/shared/shortcuts'
 import { AppShell } from '@/components/layout/app-shell'
 import { SearchPalette } from '@/components/search/search-palette'
 import { SettingsSidebarNav } from '@/components/layout/settings-sidebar-nav'
@@ -12,6 +12,7 @@ import { DEFAULT_SETTINGS_SECTION_ID, getSettingsSectionPath } from '@/pages/set
 import { HomePage } from '@/pages/home-page'
 import { SettingsPage } from '@/pages/settings-page'
 import { useWindowShortcuts } from '@/shortcuts/use-window-shortcuts'
+import { useBottomPanelStore } from '@/stores/bottom-panel-store'
 import { useLayoutStore } from '@/stores/layout-store'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
@@ -23,13 +24,25 @@ function App(): React.JSX.Element {
   const initializeNotes = useNotesStore((state) => state.initialize)
   const pickVault = useNotesStore((state) => state.pickVault)
 
-  const [shortcutBindings, setShortcutBindings] = useState(getDefaultShortcutBindings)
+  const [shortcutProfile, setShortcutProfile] = useState(getDefaultShortcutProfile)
   const [isShortcutsLoading, setIsShortcutsLoading] = useState(true)
   const [isGhostMode, setIsGhostMode] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
 
   const dispatchShortcutAction = useCallback(
-    (actionId: ShortcutActionId): void => {
+    (actionId: ShortcutActionId, origin: 'window' | 'global' = 'window'): void => {
+      const bottomPanelState = useBottomPanelStore.getState()
+      const shouldRouteToBottomPanel = bottomPanelState.isOpen && bottomPanelState.isFocused
+
+      if (actionId === 'toggle_bottom_panel') {
+        if (bottomPanelState.isOpen) {
+          bottomPanelState.hidePanel()
+        } else {
+          bottomPanelState.showAndFocus()
+        }
+        return
+      }
+
       if (actionId === 'toggle_sidebar') {
         toggleSidebar()
         return
@@ -56,6 +69,14 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'close_tab') {
+        if (shouldRouteToBottomPanel) {
+          const pane = bottomPanelState.getFocusedPane()
+          if (pane?.activeTabId) {
+            bottomPanelState.closeTab(pane.id, pane.activeTabId)
+          }
+          return
+        }
+
         const panesState = usePanesStore.getState()
         const pane = panesState.getFocusedPane()
         if (pane?.activeTabId) {
@@ -67,6 +88,11 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'next_tab') {
+        if (shouldRouteToBottomPanel) {
+          bottomPanelState.cycleTabs('next')
+          return
+        }
+
         const panesState = usePanesStore.getState()
         const pane = panesState.getFocusedPane()
         if (!pane || pane.tabs.length <= 1) return
@@ -77,6 +103,11 @@ function App(): React.JSX.Element {
       }
 
       if (actionId === 'prev_tab') {
+        if (shouldRouteToBottomPanel) {
+          bottomPanelState.cycleTabs('prev')
+          return
+        }
+
         const panesState = usePanesStore.getState()
         const pane = panesState.getFocusedPane()
         if (!pane || pane.tabs.length <= 1) return
@@ -136,6 +167,13 @@ function App(): React.JSX.Element {
         return
       }
 
+      if (actionId === 'show_main_window' || actionId === 'toggle_ghost_mode') {
+        if (origin === 'window') {
+          void window.shortcuts.execute(actionId)
+        }
+        return
+      }
+
       if (actionId === 'search') {
         setIsSearchOpen(true)
       }
@@ -144,8 +182,9 @@ function App(): React.JSX.Element {
   )
 
   useWindowShortcuts({
-    bindings: shortcutBindings,
-    onAction: dispatchShortcutAction
+    profile: shortcutProfile,
+    onAction: dispatchShortcutAction,
+    searchPaletteVisible: isSearchOpen
   })
 
   useEffect(() => {
@@ -189,18 +228,18 @@ function App(): React.JSX.Element {
 
     const unsubscribeBindingsChanged = window.shortcuts.onBindingsChanged((nextBindings) => {
       if (!mounted) return
-      setShortcutBindings(nextBindings)
+      setShortcutProfile(nextBindings)
     })
 
     const unsubscribeGlobalAction = window.shortcuts.onGlobalAction((actionId) => {
-      dispatchShortcutAction(actionId)
+      dispatchShortcutAction(actionId, 'global')
     })
 
     void window.shortcuts
       .list()
       .then((nextBindings) => {
         if (!mounted) return
-        setShortcutBindings(nextBindings)
+        setShortcutProfile(nextBindings)
       })
       .catch((error) => {
         console.error('Failed to load shortcut bindings.', error)
@@ -248,7 +287,7 @@ function App(): React.JSX.Element {
               element={
                 <SettingsPage
                   section="appearance"
-                  bindings={shortcutBindings}
+                  profile={shortcutProfile}
                   isShortcutsLoading={isShortcutsLoading}
                 />
               }
@@ -258,7 +297,7 @@ function App(): React.JSX.Element {
               element={
                 <SettingsPage
                   section="keyboard-shortcuts"
-                  bindings={shortcutBindings}
+                  profile={shortcutProfile}
                   isShortcutsLoading={isShortcutsLoading}
                 />
               }
@@ -268,7 +307,7 @@ function App(): React.JSX.Element {
               element={
                 <SettingsPage
                   section="ghost-mode"
-                  bindings={shortcutBindings}
+                  profile={shortcutProfile}
                   isShortcutsLoading={isShortcutsLoading}
                 />
               }

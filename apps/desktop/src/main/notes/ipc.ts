@@ -11,6 +11,7 @@ import {
   type ArchiveNoteResult,
   type CreateFolderResult,
   type CreateNoteInput,
+  type DeleteFolderResult,
   type DeleteNoteResult,
   type MoveNoteResult,
   type NoteDocument,
@@ -28,6 +29,7 @@ import {
   archiveVaultNote,
   createVaultFolder,
   createVaultNote,
+  deleteVaultFolder,
   deleteVaultNote,
   ensureVaultPath,
   listVaultFolders,
@@ -66,6 +68,7 @@ function removeNotesHandlers(): void {
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.saveAs)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.rename)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.delete)
+  ipcMain.removeHandler(NOTES_IPC_CHANNELS.deleteFolder)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.archive)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.move)
   ipcMain.removeHandler(NOTES_IPC_CHANNELS.createFolder)
@@ -359,6 +362,24 @@ async function deleteNote(windowId: string, relativePath: string): Promise<Delet
   return result
 }
 
+async function deleteFolder(windowId: string, relativePath: string): Promise<DeleteFolderResult> {
+  const vaultPath = await ensureConfiguredVaultPath(windowId)
+  const result = await deleteVaultFolder(vaultPath, relativePath)
+  const config = await loadCachedNotesConfig(windowId)
+
+  if (
+    config.lastOpenedRelativePath &&
+    (config.lastOpenedRelativePath === relativePath ||
+      config.lastOpenedRelativePath.startsWith(`${relativePath}/`))
+  ) {
+    const nextConfig = mergeConfig(config, { lastOpenedRelativePath: null })
+    setCachedNotesConfig(windowId, nextConfig)
+    await saveNotesConfig(windowId, nextConfig)
+  }
+
+  return result
+}
+
 async function archiveNote(windowId: string, relativePath: string): Promise<ArchiveNoteResult> {
   const vaultPath = await ensureConfiguredVaultPath(windowId)
   const result = await archiveVaultNote(vaultPath, relativePath)
@@ -477,6 +498,10 @@ export function registerNotesIpc(): () => void {
 
   ipcMain.handle(NOTES_IPC_CHANNELS.delete, (event, relativePath: string) => {
     return deleteNote(resolveWindowId(event), validateRelativePath(relativePath))
+  })
+
+  ipcMain.handle(NOTES_IPC_CHANNELS.deleteFolder, (event, relativePath: string) => {
+    return deleteFolder(resolveWindowId(event), validateRelativePath(relativePath))
   })
 
   ipcMain.handle(NOTES_IPC_CHANNELS.archive, (event, relativePath: string) => {

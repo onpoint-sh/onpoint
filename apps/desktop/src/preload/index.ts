@@ -3,7 +3,9 @@ import { electronAPI } from '@electron-toolkit/preload'
 import {
   SHORTCUT_IPC_CHANNELS,
   type ShortcutActionId,
-  type ShortcutBindings,
+  type ShortcutProfile,
+  type ShortcutRuleImport,
+  type ShortcutRulePatch,
   type ShortcutUpdateResult
 } from '@onpoint/shared/shortcuts'
 import {
@@ -11,6 +13,7 @@ import {
   type ArchiveNoteResult,
   type CreateFolderResult,
   type CreateNoteInput,
+  type DeleteFolderResult,
   type DeleteNoteResult,
   type MoveNoteResult,
   type NoteDocument,
@@ -96,16 +99,20 @@ const windowControls = {
 }
 
 const shortcuts = {
-  list: () => ipcRenderer.invoke(SHORTCUT_IPC_CHANNELS.list) as Promise<ShortcutBindings>,
-  update: (actionId: ShortcutActionId, accelerator: string) =>
+  list: () => ipcRenderer.invoke(SHORTCUT_IPC_CHANNELS.list) as Promise<ShortcutProfile>,
+  update: (actionId: ShortcutActionId, patch: ShortcutRulePatch) =>
     ipcRenderer.invoke(
       SHORTCUT_IPC_CHANNELS.update,
       actionId,
-      accelerator
+      patch
     ) as Promise<ShortcutUpdateResult>,
   reset: (actionId: ShortcutActionId) =>
     ipcRenderer.invoke(SHORTCUT_IPC_CHANNELS.reset, actionId) as Promise<void>,
   resetAll: () => ipcRenderer.invoke(SHORTCUT_IPC_CHANNELS.resetAll) as Promise<void>,
+  replaceAll: (rules: ShortcutRuleImport[]) =>
+    ipcRenderer.invoke(SHORTCUT_IPC_CHANNELS.replaceAll, rules) as Promise<ShortcutUpdateResult>,
+  execute: (actionId: ShortcutActionId) =>
+    ipcRenderer.invoke(SHORTCUT_IPC_CHANNELS.execute, actionId) as Promise<void>,
   onGlobalAction: (callback: (actionId: ShortcutActionId) => void): (() => void) => {
     const listener = (_event: IpcRendererEvent, actionId: ShortcutActionId): void => {
       callback(actionId)
@@ -117,9 +124,9 @@ const shortcuts = {
       ipcRenderer.removeListener(SHORTCUT_IPC_CHANNELS.globalAction, listener)
     }
   },
-  onBindingsChanged: (callback: (bindings: ShortcutBindings) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, bindings: ShortcutBindings): void => {
-      callback(bindings)
+  onBindingsChanged: (callback: (profile: ShortcutProfile) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, profile: ShortcutProfile): void => {
+      callback(profile)
     }
 
     ipcRenderer.on(SHORTCUT_IPC_CHANNELS.bindingsChanged, listener)
@@ -190,6 +197,11 @@ const notes = {
     ) as Promise<RenameNoteResult>,
   deleteNote: (relativePath: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.delete, relativePath) as Promise<DeleteNoteResult>,
+  deleteFolder: (relativePath: string) =>
+    ipcRenderer.invoke(
+      NOTES_IPC_CHANNELS.deleteFolder,
+      relativePath
+    ) as Promise<DeleteFolderResult>,
   archiveNote: (relativePath: string) =>
     ipcRenderer.invoke(NOTES_IPC_CHANNELS.archive, relativePath) as Promise<ArchiveNoteResult>,
   moveNote: (fromPath: string, toPath: string) =>

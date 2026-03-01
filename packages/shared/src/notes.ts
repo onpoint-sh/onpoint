@@ -34,6 +34,10 @@ export type DeleteNoteResult = {
   deletedPath: string
 }
 
+export type DeleteFolderResult = {
+  deletedPath: string
+}
+
 export type ArchiveNoteResult = {
   archivedTo: string
 }
@@ -103,6 +107,7 @@ export const NOTES_IPC_CHANNELS = {
   saveAs: 'notes:save-as',
   rename: 'notes:rename',
   delete: 'notes:delete',
+  deleteFolder: 'notes:delete-folder',
   archive: 'notes:archive',
   move: 'notes:move',
   createFolder: 'notes:create-folder',

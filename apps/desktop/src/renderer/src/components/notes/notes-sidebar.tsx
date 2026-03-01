@@ -9,13 +9,21 @@ import {
   FolderPlus,
   Settings
 } from 'lucide-react'
+import {
+  normalizeProposedName,
+  validateProposedTreeName
+} from '@onpoint/notes-core/file-name-validation'
 import { useNavigate } from 'react-router-dom'
 import { useNotesStore } from '@/stores/notes-store'
 import { usePanesStore } from '@/stores/panes-store'
 import { useTreeStateStore } from '@/stores/tree-state-store'
 import { buildNotesTree, type NoteTreeNode } from '@/lib/notes-tree'
 import { getFileExtension, hasFileExtension } from '@/lib/file-types'
-import { NoteTreeNodeRenderer, markAsJustCreated } from './note-tree-node'
+import {
+  NoteTreeNodeRenderer,
+  markAsJustCreated,
+  type ValidateTreeNodeNameInput
+} from './note-tree-node'
 import useResizeObserver from './use-resize-observer'
 
 const TREE_ROW_HEIGHT = 28
@@ -25,6 +33,18 @@ type StickyFolderRow = {
   name: string
   relativePath: string
   level: number
+}
+
+function toPosixPath(value: string): string {
+  return value.replace(/\\/g, '/')
+}
+
+function normalizeUiError(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')
+  }
+
+  return fallback
 }
 
 function NotesSidebar(): React.JSX.Element {
@@ -37,6 +57,7 @@ function NotesSidebar(): React.JSX.Element {
   const createNote = useNotesStore((s) => s.createNote)
   const renameNote = useNotesStore((s) => s.renameNote)
   const deleteNote = useNotesStore((s) => s.deleteNote)
+  const deleteFolder = useNotesStore((s) => s.deleteFolder)
   const archiveNote = useNotesStore((s) => s.archiveNote)
   const moveNote = useNotesStore((s) => s.moveNote)
   const createFolder = useNotesStore((s) => s.createFolder)
@@ -57,7 +78,11 @@ function NotesSidebar(): React.JSX.Element {
   const scrollOffsetRef = useRef(0)
   const pendingNewNodeIds = useRef(new Set<string>())
 
-  const vaultName = config.vaultPath?.split('/').pop() ?? 'Notes'
+  const vaultName =
+    (config.vaultPath ?? '')
+      .split(/[\\/]+/)
+      .filter(Boolean)
+      .at(-1) ?? 'Notes'
 
   useResizeObserver(containerRef, (entry) => {
     setContainerHeight(entry.contentRect.height)
@@ -92,6 +117,41 @@ function NotesSidebar(): React.JSX.Element {
   const treeData = useMemo(
     () => buildNotesTree(notes, [...new Set([...diskFolders, ...pendingFolders])]),
     [notes, diskFolders, pendingFolders]
+  )
+
+  const existingTreePaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const note of notes) {
+      paths.add(toPosixPath(note.relativePath))
+    }
+    for (const folder of diskFolders) {
+      paths.add(toPosixPath(folder))
+    }
+    for (const folder of pendingFolders) {
+      paths.add(toPosixPath(folder))
+    }
+    return paths
+  }, [notes, diskFolders, pendingFolders])
+
+  const validateTreeNodeName = useCallback(
+    ({ id, name, isNote }: ValidateTreeNodeNameInput) => {
+      const currentPath = id.startsWith('folder:') ? id.replace(/^folder:/, '') : id
+      const normalizedCurrentPath = toPosixPath(currentPath)
+      const parentPath = normalizedCurrentPath.split('/').slice(0, -1).join('/')
+      const normalizedName = normalizeProposedName(name)
+      const containsSeparator = /[\\/]/.test(normalizedName)
+      const isMarkdownNote = isNote && normalizedCurrentPath.toLowerCase().endsWith('.md')
+      const shouldValidateAsPath = id.startsWith('folder:') || !isMarkdownNote || containsSeparator
+
+      return validateProposedTreeName({
+        proposedName: normalizedName,
+        parentPath: shouldValidateAsPath ? parentPath : undefined,
+        currentPath: shouldValidateAsPath ? normalizedCurrentPath : undefined,
+        existingPaths: shouldValidateAsPath ? existingTreePaths : undefined,
+        isWindows: window.windowControls.platform === 'win32'
+      })
+    },
+    [existingTreePaths]
   )
 
   const getFolderNodeFromTopNode = useCallback(
@@ -210,75 +270,154 @@ function NotesSidebar(): React.JSX.Element {
 
   const handleRename = useCallback(
     ({ id, name }: { id: string; name: string }) => {
+      const isFolder = id.startsWith('folder:')
+      const validation = validateTreeNodeName({ id, name, isNote: !isFolder })
+      if (validation?.severity === 'error') return
+      const normalizedName = validation?.normalizedName ?? normalizeProposedName(name)
+
       if (id.startsWith('folder:')) {
         const oldPath = id.replace(/^folder:/, '')
-        const segments = oldPath.split('/')
-        segments[segments.length - 1] = name
-        const newPath = segments.join('/')
+        const parentDir = oldPath.split('/').slice(0, -1).join('/')
+        const nextName = toPosixPath(normalizedName)
+        const newPath = parentDir ? `${parentDir}/${nextName}` : nextName
         if (oldPath === newPath) return
 
         void renameFolder(oldPath, newPath)
         setPendingFolders((prev) => {
           const next = new Set(prev)
-          if (next.has(oldPath)) {
-            next.delete(oldPath)
-            next.add(newPath)
+          for (const entry of prev) {
+            if (entry === oldPath || entry.startsWith(`${oldPath}/`)) {
+              next.delete(entry)
+              next.add(`${newPath}${entry.slice(oldPath.length)}`)
+            }
           }
           return next
         })
       } else {
-        const isNewNode = pendingNewNodeIds.current.delete(id)
+        const currentPath = toPosixPath(id)
+        const isMarkdownNote = currentPath.toLowerCase().endsWith('.md')
+        const containsSeparator = /[\\/]/.test(normalizedName)
+        const isNewNode = pendingNewNodeIds.current.has(id)
+        const hasRequestedNonMdExtension =
+          hasFileExtension(normalizedName) && !normalizedName.toLowerCase().endsWith('.md')
+        const shouldMovePath =
+          !isMarkdownNote ||
+          containsSeparator ||
+          (isMarkdownNote && isNewNode && hasRequestedNonMdExtension)
 
-        if (isNewNode && hasFileExtension(name) && !name.toLowerCase().endsWith('.md')) {
-          // New node with non-md extension: replace temp .md with the actual file
-          const parentDir = id.split('/').slice(0, -1).join('/')
-          const newPath = parentDir ? `${parentDir}/${name}` : name
-          void (async () => {
-            await window.notes.moveNote(id, newPath)
-            await window.notes.saveNote(newPath, '')
-            usePanesStore.getState().updateTabPath(id, newPath)
-            usePanesStore.getState().openTab(newPath)
-            void useNotesStore.getState().refreshNotesList()
-          })()
-        } else if (!isNewNode && !id.toLowerCase().endsWith('.md')) {
-          // Existing non-md file: rename the file, preserving extension if not typed
-          const ext = getFileExtension(id)
-          const parentDir = id.split('/').slice(0, -1).join('/')
-          const newFileName = hasFileExtension(name) ? name : `${name}${ext}`
-          const newPath = parentDir ? `${parentDir}/${newFileName}` : newFileName
-          if (id !== newPath) {
-            void (async () => {
-              await window.notes.moveNote(id, newPath)
-              usePanesStore.getState().updateTabPath(id, newPath)
-              void useNotesStore.getState().refreshNotesList()
-            })()
-          }
-        } else {
+        if (!shouldMovePath) {
+          pendingNewNodeIds.current.delete(id)
           // .md file (new or existing): title rename via frontmatter
-          const title = name.replace(/\.md$/i, '')
+          const title = normalizedName.replace(/\.md$/i, '')
           usePanesStore.getState().openTab(id)
           void renameNote(id, title)
+          return
         }
+
+        const parentDir = currentPath.split('/').slice(0, -1).join('/')
+        let targetPath = parentDir
+          ? `${parentDir}/${toPosixPath(normalizedName)}`
+          : toPosixPath(normalizedName)
+
+        if (isMarkdownNote) {
+          if (!hasFileExtension(targetPath)) {
+            targetPath = `${targetPath}.md`
+          }
+        } else {
+          const ext = getFileExtension(currentPath)
+          if (!hasFileExtension(targetPath) && ext) {
+            targetPath = `${targetPath}${ext}`
+          }
+        }
+
+        if (targetPath === currentPath) {
+          pendingNewNodeIds.current.delete(id)
+          return
+        }
+
+        pendingNewNodeIds.current.delete(id)
+        void (async () => {
+          try {
+            const result = await window.notes.moveNote(id, targetPath)
+            usePanesStore.getState().updateTabPath(id, result.relativePath)
+            await useNotesStore.getState().refreshNotesList()
+
+            if (isMarkdownNote && result.relativePath.toLowerCase().endsWith('.md')) {
+              const movedFileName = result.relativePath.split('/').pop() ?? result.relativePath
+              const title = movedFileName.replace(/\.md$/i, '')
+              if (title.length > 0) {
+                await window.notes.renameNote(result.relativePath, title)
+                await useNotesStore.getState().refreshNotesList()
+              }
+            } else if (
+              isMarkdownNote &&
+              isNewNode &&
+              !result.relativePath.toLowerCase().endsWith('.md')
+            ) {
+              // New .md note converted to non-md file: clear default markdown template content.
+              await window.notes.saveNote(result.relativePath, '')
+              usePanesStore.getState().openTab(result.relativePath)
+              await useNotesStore.getState().refreshNotesList()
+            }
+
+            useNotesStore.setState({ error: null })
+          } catch (error) {
+            useNotesStore.setState({ error: normalizeUiError(error, 'Failed to rename file.') })
+          }
+        })()
       }
     },
-    [renameNote, renameFolder]
+    [renameNote, renameFolder, validateTreeNodeName]
   )
 
   const handleDelete = useCallback(
-    ({ ids }: { ids: string[] }) => {
-      for (const id of ids) {
-        if (id.startsWith('folder:')) {
-          const folderPath = id.replace(/^folder:/, '')
-          const folderNotes = notes.filter((n) => n.relativePath.startsWith(folderPath + '/'))
-          for (const note of folderNotes) {
-            void deleteNote(note.relativePath)
+    (ids: string[]) => {
+      const folderPaths = ids
+        .filter((id) => id.startsWith('folder:'))
+        .map((id) => id.replace(/^folder:/, ''))
+
+      const topLevelFolderPaths = folderPaths.filter(
+        (folder) => !folderPaths.some((other) => other !== folder && folder.startsWith(`${other}/`))
+      )
+
+      const notePaths = ids.filter(
+        (id) =>
+          !id.startsWith('folder:') &&
+          !topLevelFolderPaths.some((folder) => id.startsWith(`${folder}/`))
+      )
+
+      if (topLevelFolderPaths.length > 0) {
+        setPendingFolders((prev) => {
+          const next = new Set(prev)
+          for (const entry of prev) {
+            if (
+              topLevelFolderPaths.some(
+                (folder) => entry === folder || entry.startsWith(`${folder}/`)
+              )
+            ) {
+              next.delete(entry)
+            }
           }
-        } else {
-          void deleteNote(id)
-        }
+          return next
+        })
+      }
+
+      for (const folderPath of topLevelFolderPaths) {
+        void deleteFolder(folderPath)
+      }
+
+      for (const notePath of notePaths) {
+        void deleteNote(notePath)
       }
     },
-    [deleteNote, notes]
+    [deleteFolder, deleteNote]
+  )
+
+  const handleArboristDelete = useCallback(
+    ({ ids }: { ids: string[] }) => {
+      handleDelete(ids)
+    },
+    [handleDelete]
   )
 
   const handleMove = useCallback(
@@ -418,16 +557,7 @@ function NotesSidebar(): React.JSX.Element {
           }
           break
         case 'delete':
-          for (const n of targets) {
-            if (n.data.isNote) {
-              void deleteNote(n.data.relativePath)
-            } else {
-              const folderPath = n.data.relativePath
-              for (const note of notes.filter((x) => x.relativePath.startsWith(folderPath + '/'))) {
-                void deleteNote(note.relativePath)
-              }
-            }
-          }
+          handleDelete(targets.map((n) => n.id))
           break
         case 'new-note':
           tree.createLeaf()
@@ -466,7 +596,7 @@ function NotesSidebar(): React.JSX.Element {
           break
       }
     },
-    [notes, config.vaultPath, createNote, deleteNote, archiveNote, moveNote]
+    [config.vaultPath, archiveNote, moveNote, handleDelete]
   )
 
   return (
@@ -491,7 +621,7 @@ function NotesSidebar(): React.JSX.Element {
           <div className="group -mx-3 flex items-center gap-0.5 px-3">
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-1 rounded-[calc(var(--radius)-2px)] py-0.5 text-[0.75rem] font-semibold uppercase tracking-wide text-sidebar-foreground/70 transition-colors duration-[120ms] hover:text-sidebar-foreground"
+              className="flex min-w-0 flex-1 items-center gap-1 rounded-[calc(var(--radius)-2px)] py-0.5 text-[0.75rem] font-semibold tracking-wide text-sidebar-foreground/70 transition-colors duration-[120ms] hover:text-sidebar-foreground"
               onClick={() => setIsTreeOpen((prev) => !prev)}
             >
               <ChevronRight
@@ -579,10 +709,12 @@ function NotesSidebar(): React.JSX.Element {
                     }}
                     onCreate={handleCreate}
                     onRename={handleRename}
-                    onDelete={handleDelete}
+                    onDelete={handleArboristDelete}
                     onMove={handleMove}
                   >
-                    {NoteTreeNodeRenderer}
+                    {(props) => (
+                      <NoteTreeNodeRenderer {...props} validateName={validateTreeNodeName} />
+                    )}
                   </Tree>
                   {stickyFolderRows.map((row, index) => (
                     <button

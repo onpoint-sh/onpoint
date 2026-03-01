@@ -5,6 +5,7 @@ import { getLeaves, createRemoveUpdate, updateTree } from 'react-mosaic-componen
 import { isUntitledPath, UNTITLED_PREFIX } from '@onpoint/shared/notes'
 import { WINDOW_ID } from '@/lib/detached-window'
 import { deleteUntitledContent } from '@/lib/untitled-content-store'
+import { isTerminalEditorPath } from '@/lib/terminal-editor-tab'
 
 // Migrate old unkeyed localStorage to keyed format for the "main" window
 if (WINDOW_ID === 'main') {
@@ -170,9 +171,10 @@ export const usePanesStore = create<PanesStoreState>()(
         }
 
         const state = get()
-        const newLayout = state.layout === null
-          ? paneId
-          : { direction: 'row' as MosaicDirection, first: state.layout, second: paneId }
+        const newLayout =
+          state.layout === null
+            ? paneId
+            : { direction: 'row' as MosaicDirection, first: state.layout, second: paneId }
 
         set({
           layout: newLayout,
@@ -481,10 +483,9 @@ export const usePanesStore = create<PanesStoreState>()(
           const updatedPanes = { ...state.panes }
           updatedPanes[paneId] = {
             ...pane,
-            recentlyClosedPaths: [
-              ...pane.recentlyClosedPaths,
-              closingTab.relativePath
-            ].slice(-MAX_RECENTLY_CLOSED)
+            recentlyClosedPaths: [...pane.recentlyClosedPaths, closingTab.relativePath].slice(
+              -MAX_RECENTLY_CLOSED
+            )
           }
           set({ panes: updatedPanes })
           get().closePane(paneId)
@@ -492,14 +493,11 @@ export const usePanesStore = create<PanesStoreState>()(
         }
 
         const nextActiveTabId =
-          pane.activeTabId === tabId
-            ? pickNextActiveTab(nextTabs, index)
-            : pane.activeTabId
+          pane.activeTabId === tabId ? pickNextActiveTab(nextTabs, index) : pane.activeTabId
 
-        const recentlyClosedPaths = [
-          ...pane.recentlyClosedPaths,
-          closingTab.relativePath
-        ].slice(-MAX_RECENTLY_CLOSED)
+        const recentlyClosedPaths = [...pane.recentlyClosedPaths, closingTab.relativePath].slice(
+          -MAX_RECENTLY_CLOSED
+        )
 
         set({
           panes: {
@@ -523,14 +521,11 @@ export const usePanesStore = create<PanesStoreState>()(
         if (keptTabs.length === 0) return
 
         const keptIds = new Set(keptTabs.map((t) => t.id))
-        const closedPaths = pane.tabs
-          .filter((t) => !keptIds.has(t.id))
-          .map((t) => t.relativePath)
+        const closedPaths = pane.tabs.filter((t) => !keptIds.has(t.id)).map((t) => t.relativePath)
 
-        const recentlyClosedPaths = [
-          ...pane.recentlyClosedPaths,
-          ...closedPaths
-        ].slice(-MAX_RECENTLY_CLOSED)
+        const recentlyClosedPaths = [...pane.recentlyClosedPaths, ...closedPaths].slice(
+          -MAX_RECENTLY_CLOSED
+        )
 
         set({
           panes: {
@@ -765,7 +760,10 @@ export const usePanesStore = create<PanesStoreState>()(
         const panesToRemove: string[] = []
 
         for (const [paneId, pane] of Object.entries(state.panes)) {
-          const validTabs = pane.tabs.filter((t) => !isUntitledPath(t.relativePath) && existingPaths.has(t.relativePath))
+          const validTabs = pane.tabs.filter((tab) => {
+            if (isTerminalEditorPath(tab.relativePath)) return true
+            return !isUntitledPath(tab.relativePath) && existingPaths.has(tab.relativePath)
+          })
           const validRecentlyClosedPaths = pane.recentlyClosedPaths.filter((p) =>
             existingPaths.has(p)
           )
@@ -851,9 +849,7 @@ export const usePanesStore = create<PanesStoreState>()(
 
         // Validate focusedPaneId
         const validFocusedPaneId =
-          focusedPaneId && panes[focusedPaneId]
-            ? focusedPaneId
-            : Object.keys(panes)[0] ?? null
+          focusedPaneId && panes[focusedPaneId] ? focusedPaneId : (Object.keys(panes)[0] ?? null)
 
         return {
           ...currentState,
@@ -899,10 +895,8 @@ export function findAdjacentPaneId(
   const path = findPaneIdInLayout(layout, paneId)
   if (!path) return null
 
-  const mosaicDir: MosaicDirection =
-    direction === 'up' || direction === 'down' ? 'column' : 'row'
-  const myBranch: MosaicBranch =
-    direction === 'up' || direction === 'left' ? 'second' : 'first'
+  const mosaicDir: MosaicDirection = direction === 'up' || direction === 'down' ? 'column' : 'row'
+  const myBranch: MosaicBranch = direction === 'up' || direction === 'left' ? 'second' : 'first'
   const targetBranch: MosaicBranch = myBranch === 'first' ? 'second' : 'first'
 
   for (let i = path.length - 1; i >= 0; i--) {

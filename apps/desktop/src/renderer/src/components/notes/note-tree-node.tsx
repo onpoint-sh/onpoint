@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { NodeRendererProps } from 'react-arborist'
 import { ChevronRight } from 'lucide-react'
 import { useIconThemeAdapter } from '@onpoint/icon-themes'
+import type { TreeNameValidationResult } from '@onpoint/notes-core/file-name-validation'
 import type { NoteTreeNode } from '@/lib/notes-tree'
 import { getFileExtension } from '@/lib/file-types'
 import { useIconThemeStore } from '@/stores/icon-theme-store'
@@ -15,6 +16,16 @@ export function markAsJustCreated(id: string): void {
   justCreatedIds.add(id)
 }
 
+export type ValidateTreeNodeNameInput = {
+  id: string
+  name: string
+  isNote: boolean
+}
+
+type NoteTreeNodeRendererProps = NodeRendererProps<NoteTreeNode> & {
+  validateName?: (input: ValidateTreeNodeNameInput) => TreeNameValidationResult | null
+}
+
 function ThemedIcon({ svg, className }: { svg: string; className?: string }): React.JSX.Element {
   return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
 }
@@ -22,8 +33,9 @@ function ThemedIcon({ svg, className }: { svg: string; className?: string }): Re
 function NoteTreeNodeRenderer({
   node,
   style,
-  dragHandle
-}: NodeRendererProps<NoteTreeNode>): React.JSX.Element {
+  dragHandle,
+  validateName
+}: NoteTreeNodeRendererProps): React.JSX.Element {
   const openTab = usePanesStore((s) => s.openTab)
   const focusedPane = usePanesStore((s) => {
     if (!s.focusedPaneId) return null
@@ -45,6 +57,17 @@ function NoteTreeNodeRenderer({
         : node.data.name
   )
   const inputRef = useRef<HTMLInputElement>(null)
+  const editValidation = useMemo(
+    () =>
+      node.isEditing && validateName
+        ? validateName({
+            id: node.id,
+            name: editValue,
+            isNote: node.data.isNote
+          })
+        : null,
+    [node.id, node.isEditing, node.data.isNote, editValue, validateName]
+  )
 
   const contentStyle = useMemo(
     () => ({
@@ -101,26 +124,53 @@ function NoteTreeNodeRenderer({
               {folderIcon(false)}
             </>
           )}
-          <input
-            ref={inputRef}
-            autoFocus
-            className="h-auto flex-1 rounded-none border border-sidebar-ring bg-sidebar p-0 text-[0.8rem] text-sidebar-foreground outline-none"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              autoFocus
+              className={`h-auto w-full rounded-none border bg-sidebar p-0 text-[0.8rem] text-sidebar-foreground outline-none ${
+                editValidation?.severity === 'error'
+                  ? 'border-destructive'
+                  : editValidation?.severity === 'warning'
+                    ? 'border-amber-500/80'
+                    : 'border-sidebar-ring'
+              }`}
+              value={editValue}
+              aria-invalid={editValidation?.severity === 'error'}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (editValidation?.severity === 'error') {
+                    inputRef.current?.focus()
+                    return
+                  }
+                  justCreatedIds.delete(node.id)
+                  node.submit(editValidation?.normalizedName ?? editValue)
+                } else if (e.key === 'Escape') {
+                  justCreatedIds.delete(node.id)
+                  node.reset()
+                }
+              }}
+              onBlur={() => {
+                if (editValidation?.severity === 'error') {
+                  requestAnimationFrame(() => {
+                    inputRef.current?.focus()
+                  })
+                  return
+                }
                 justCreatedIds.delete(node.id)
-                node.submit(editValue)
-              } else if (e.key === 'Escape') {
-                justCreatedIds.delete(node.id)
-                node.reset()
-              }
-            }}
-            onBlur={() => {
-              justCreatedIds.delete(node.id)
-              node.submit(editValue)
-            }}
-          />
+                node.submit(editValidation?.normalizedName ?? editValue)
+              }}
+            />
+            {editValidation ? (
+              <div
+                className={`note-tree-inline-validation ${editValidation.severity === 'error' ? 'is-error' : 'is-warning'}`}
+              >
+                {editValidation.message}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     )

@@ -14,6 +14,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./vault-files": "./src/vault-files.ts",
+    "./file-name-validation": "./src/file-name-validation.ts",
     "./vault-config": "./src/vault-config.ts",
     "./fuzzy-search": "./src/fuzzy-search.ts",
     "./notes-tree": "./src/notes-tree.ts",

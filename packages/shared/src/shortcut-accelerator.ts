@@ -76,6 +76,7 @@ const KEY_ALIASES: Readonly<Record<string, string>> = {
   plus: 'Plus',
   minus: 'Minus',
   comma: ',',
+  backslash: '\\',
   equals: '=',
   _: 'Minus'
 }
@@ -101,6 +102,7 @@ const EVENT_KEY_ALIASES: Readonly<Record<string, string>> = {
   right: 'Right',
   ' ': 'Space',
   ',': ',',
+  '\\': '\\',
   '=': '=',
   _: 'Minus',
   subtract: 'Minus',
@@ -112,7 +114,8 @@ const EVENT_CODE_ALIASES: Readonly<Record<string, string>> = {
   NumpadSubtract: 'Minus',
   Equal: '=',
   NumpadAdd: 'Plus',
-  Comma: ','
+  Comma: ',',
+  Backslash: '\\'
 }
 
 const MODIFIER_ONLY_EVENT_KEYS = new Set([
@@ -144,6 +147,7 @@ function normalizeKeyToken(token: string): string | null {
   if (normalizedToken === '+') return 'Plus'
   if (normalizedToken === '-') return 'Minus'
   if (normalizedToken === ',') return ','
+  if (normalizedToken === '\\') return '\\'
   if (normalizedToken === '=') return '='
 
   return null
@@ -211,6 +215,7 @@ function normalizeEventKey(key: string, code?: string): string | null {
   if (key === '+') return 'Plus'
   if (key === '-') return 'Minus'
   if (key === ',') return ','
+  if (key === '\\') return '\\'
   if (key === '=') return '='
 
   return null
@@ -223,7 +228,8 @@ function shouldIgnoreShiftForLayoutSymbol(event: ShortcutKeyboardEventLike): boo
   const shiftedSymbolsByCode: Readonly<Record<string, string>> = {
     Minus: '_',
     Equal: '+',
-    Comma: '<'
+    Comma: '<',
+    Backslash: '|'
   }
 
   const shiftedSymbol = shiftedSymbolsByCode[event.code]

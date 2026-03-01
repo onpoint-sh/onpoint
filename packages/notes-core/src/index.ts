@@ -24,6 +24,7 @@ export {
   archiveVaultNote,
   moveVaultNote,
   createVaultFolder,
+  deleteVaultFolder,
   searchVaultContentV2,
   searchVaultTitlesV2,
   searchVaultContent,
@@ -48,3 +49,13 @@ export {
   stripCodeBlocks,
   summarize
 } from './markdown-strip'
+
+export {
+  type TreeNameValidationCode,
+  type TreeNameValidationResult,
+  type TreeNameValidationSeverity,
+  type ValidateProposedTreeNameInput,
+  normalizeProposedName,
+  isValidBasename,
+  validateProposedTreeName
+} from './file-name-validation'

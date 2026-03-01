@@ -278,13 +278,33 @@ function MermaidEditor({
     const container = containerRef.current
     if (!container || viewMode !== 'preview') return
 
+    const zoomAtClientPoint = (clientX: number, clientY: number, nextScaleRaw: number): void => {
+      const rect = container.getBoundingClientRect()
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+      const pointerX = clientX - rect.left
+      const pointerY = clientY - rect.top
+      const prevScale = scaleRef.current
+      const nextScale = clampScale(nextScaleRaw)
+      if (!Number.isFinite(nextScale) || nextScale === prevScale) return
+      const ratio = nextScale / prevScale
+      const prevTranslate = translateRef.current
+
+      // Keep the point under the cursor fixed while scaling.
+      translateRef.current = {
+        x: ratio * prevTranslate.x + (1 - ratio) * (pointerX - centerX),
+        y: ratio * prevTranslate.y + (1 - ratio) * (pointerY - centerY)
+      }
+      scaleRef.current = nextScale
+    }
+
     const handleWheel = (e: WheelEvent): void => {
       e.preventDefault()
 
       if (e.ctrlKey || e.metaKey) {
         // Pinch-to-zoom or Ctrl+scroll
-        const factor = 1 - e.deltaY * 0.002
-        scaleRef.current = clampScale(scaleRef.current * factor)
+        const factor = Math.exp(-e.deltaY * 0.003)
+        zoomAtClientPoint(e.clientX, e.clientY, scaleRef.current * factor)
       } else {
         // Pan via scroll
         translateRef.current = {

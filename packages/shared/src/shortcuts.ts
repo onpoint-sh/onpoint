@@ -1,7 +1,22 @@
 export type ShortcutScope = 'window' | 'global'
 
+export type ShortcutRuleSource = 'system' | 'user'
+export type ShortcutWhen = string
+
+export type ShortcutWhenPresetId =
+  | 'window_focused'
+  | 'window_except_markdown'
+  | 'markdown_editor_only'
+
+export type ShortcutWhenPreset = {
+  id: ShortcutWhenPresetId
+  label: string
+  when: ShortcutWhen
+}
+
 export type ShortcutActionId =
   | 'toggle_sidebar'
+  | 'toggle_bottom_panel'
   | 'open_settings'
   | 'open_folder'
   | 'create_note'
@@ -23,14 +38,47 @@ export type ShortcutDefinition = {
   id: ShortcutActionId
   label: string
   description: string
-  scope: ShortcutScope
   defaultAccelerator: string
-  allowInEditable?: boolean
+  allowedScopes: readonly ShortcutScope[]
+  defaultScope: ShortcutScope
+  defaultWhen?: ShortcutWhen
+  whenPresets: readonly ShortcutWhenPresetId[]
+}
+
+export type ShortcutRule = {
+  actionId: ShortcutActionId
+  accelerator: string
+  scope: ShortcutScope
+  when?: ShortcutWhen
+  source: ShortcutRuleSource
+}
+
+export type ShortcutRuleOverrides = {
+  accelerator?: string
+  scope?: ShortcutScope
+  when?: ShortcutWhen
+}
+
+export type ShortcutOverrides = Partial<Record<ShortcutActionId, ShortcutRuleOverrides>>
+
+export type ShortcutRulePatch = {
+  accelerator?: string
+  scope?: ShortcutScope
+  when?: ShortcutWhen | null
+}
+
+export type ShortcutRuleImport = {
+  command: ShortcutActionId
+  key: string
+  scope: ShortcutScope
+  when?: ShortcutWhen
+}
+
+export type ShortcutProfile = {
+  rules: Record<ShortcutActionId, ShortcutRule>
 }
 
 export type ShortcutBindings = Record<ShortcutActionId, string>
-
-export type ShortcutOverrides = Partial<Record<ShortcutActionId, string>>
 
 export type ShortcutUpdateResult =
   | { ok: true }
@@ -40,139 +88,213 @@ export type ShortcutUpdateResult =
       conflictWith?: ShortcutActionId
     }
 
+export const SHORTCUT_WHEN_PRESETS: readonly ShortcutWhenPreset[] = [
+  {
+    id: 'window_focused',
+    label: 'Window focused',
+    when: 'windowFocus && !shortcutCapture'
+  },
+  {
+    id: 'window_except_markdown',
+    label: 'Window focused except Markdown editor',
+    when: 'windowFocus && !shortcutCapture && !markdownEditorFocus'
+  },
+  {
+    id: 'markdown_editor_only',
+    label: 'Markdown editor only',
+    when: 'windowFocus && !shortcutCapture && markdownEditorFocus'
+  }
+] as const
+
+export const SHORTCUT_WHEN_PRESETS_BY_ID: Record<ShortcutWhenPresetId, ShortcutWhenPreset> =
+  SHORTCUT_WHEN_PRESETS.reduce<Record<ShortcutWhenPresetId, ShortcutWhenPreset>>(
+    (accumulator, preset) => {
+      accumulator[preset.id] = preset
+      return accumulator
+    },
+    {} as Record<ShortcutWhenPresetId, ShortcutWhenPreset>
+  )
+
 export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
   {
     id: 'toggle_sidebar',
     label: 'Toggle Sidebar',
     description: 'Show or hide the app sidebar.',
-    scope: 'window',
-    defaultAccelerator: 'CommandOrControl+B'
+    defaultAccelerator: 'CommandOrControl+B',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_except_markdown.when,
+    whenPresets: ['window_focused', 'window_except_markdown', 'markdown_editor_only']
+  },
+  {
+    id: 'toggle_bottom_panel',
+    label: 'Toggle Bottom Panel',
+    description: 'Show or hide the bottom panel.',
+    defaultAccelerator: 'CommandOrControl+J',
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'open_settings',
     label: 'Open Settings',
     description: 'Open the settings page.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+,',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'open_folder',
     label: 'Open Folder',
     description: 'Open a folder to use as your notes vault.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+O',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'create_note',
     label: 'Create Note',
     description: 'Create a new note in the selected notes folder.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+N',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'close_tab',
     label: 'Close Tab',
     description: 'Close the currently active tab.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+W',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'next_tab',
     label: 'Next Tab',
     description: 'Switch to the next tab.',
-    scope: 'window',
     defaultAccelerator: 'Control+Tab',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'prev_tab',
     label: 'Previous Tab',
     description: 'Switch to the previous tab.',
-    scope: 'window',
     defaultAccelerator: 'Control+Shift+Tab',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'reopen_closed_tab',
     label: 'Reopen Closed Tab',
     description: 'Reopen the most recently closed tab.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+Shift+T',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'split_pane_right',
     label: 'Split Right',
     description: 'Split the focused pane to the right.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+\\',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'split_pane_down',
     label: 'Split Down',
     description: 'Split the focused pane downward.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+Shift+\\',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'zoom_in',
     label: 'Zoom In',
     description: 'Increase the app zoom level.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+=',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'zoom_out',
     label: 'Zoom Out',
     description: 'Decrease the app zoom level.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+Minus',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'zoom_reset',
     label: 'Reset Zoom',
     description: 'Reset the app zoom level.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+0',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'show_main_window',
     label: 'Show Main Window',
     description: 'Bring the main app window to the foreground.',
-    scope: 'global',
-    defaultAccelerator: 'CommandOrControl+Shift+Space'
+    defaultAccelerator: 'CommandOrControl+Shift+Space',
+    allowedScopes: ['window', 'global'],
+    defaultScope: 'global',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'toggle_ghost_mode',
     label: 'Toggle Ghost Mode',
     description: 'Make the app invisible to screen recording, semi-transparent, and always on top.',
-    scope: 'global',
-    defaultAccelerator: 'CommandOrControl+Shift+G'
+    defaultAccelerator: 'CommandOrControl+Shift+G',
+    allowedScopes: ['window', 'global'],
+    defaultScope: 'global',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'new_window',
     label: 'New Window',
     description: 'Open a new, independent app window.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+Shift+N',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   },
   {
     id: 'search',
     label: 'Search',
     description: 'Open the search palette to find notes by title or content.',
-    scope: 'window',
     defaultAccelerator: 'CommandOrControl+K',
-    allowInEditable: true
+    allowedScopes: ['window'],
+    defaultScope: 'window',
+    defaultWhen: SHORTCUT_WHEN_PRESETS_BY_ID.window_focused.when,
+    whenPresets: ['window_focused']
   }
 ] as const
 
@@ -195,6 +317,8 @@ export const SHORTCUT_IPC_CHANNELS = {
   update: 'shortcuts:update',
   reset: 'shortcuts:reset',
   resetAll: 'shortcuts:reset-all',
+  replaceAll: 'shortcuts:replace-all',
+  execute: 'shortcuts:execute',
   bindingsChanged: 'shortcuts:bindings-changed',
   globalAction: 'shortcuts:global-action'
 } as const
@@ -203,14 +327,43 @@ export function isShortcutActionId(value: string): value is ShortcutActionId {
   return SHORTCUT_ACTION_IDS.includes(value as ShortcutActionId)
 }
 
+export function normalizeShortcutWhen(
+  when: ShortcutWhen | null | undefined
+): ShortcutWhen | undefined {
+  if (typeof when !== 'string') return undefined
+  const trimmed = when.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+export function getDefaultShortcutProfile(): ShortcutProfile {
+  return {
+    rules: SHORTCUT_DEFINITIONS.reduce<Record<ShortcutActionId, ShortcutRule>>(
+      (accumulator, definition) => {
+        accumulator[definition.id] = {
+          actionId: definition.id,
+          accelerator: definition.defaultAccelerator,
+          scope: definition.defaultScope,
+          when: normalizeShortcutWhen(definition.defaultWhen),
+          source: 'system'
+        }
+
+        return accumulator
+      },
+      {} as Record<ShortcutActionId, ShortcutRule>
+    )
+  }
+}
+
 export function getDefaultShortcutBindings(): ShortcutBindings {
-  return SHORTCUT_DEFINITIONS.reduce<ShortcutBindings>(
-    (bindings, definition) => {
-      bindings[definition.id] = definition.defaultAccelerator
+  const profile = getDefaultShortcutProfile()
+  return SHORTCUT_ACTION_IDS.reduce<ShortcutBindings>(
+    (bindings, actionId) => {
+      bindings[actionId] = profile.rules[actionId].accelerator
       return bindings
     },
     {
       toggle_sidebar: 'CommandOrControl+B',
+      toggle_bottom_panel: 'CommandOrControl+J',
       open_settings: 'CommandOrControl+,',
       open_folder: 'CommandOrControl+O',
       create_note: 'CommandOrControl+N',
