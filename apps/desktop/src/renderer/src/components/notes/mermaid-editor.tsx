@@ -402,7 +402,7 @@ function MermaidEditor({
               fontSize: 13,
               lineNumbers: 'on',
               wordWrap: 'on',
-              scrollBeyondLastLine: false,
+              scrollBeyondLastLine: true,
               automaticLayout: true,
               padding: { top: 8 }
             }}
